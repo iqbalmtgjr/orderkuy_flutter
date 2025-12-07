@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_thermal_printer/flutter_thermal_printer.dart';
 import 'package:flutter_thermal_printer/utils/printer.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThermalPrintService {
@@ -9,16 +11,32 @@ class ThermalPrintService {
   static bool _isConnected = false;
   static DateTime? _lastConnectionAttempt;
 
-  // Singleton pattern untuk maintain connection state
+  // Singleton pattern
   static final ThermalPrintService _instance = ThermalPrintService._internal();
   factory ThermalPrintService() => _instance;
   ThermalPrintService._internal();
+
+  // Load logo image from assets
+  static Future<img.Image?> _loadLogoImage() async {
+    try {
+      final ByteData data = await rootBundle.load('assets/icon/orderkuy.png');
+      final Uint8List bytes = data.buffer.asUint8List();
+      final img.Image? image = img.decodeImage(bytes);
+      if (image == null) {
+        debugPrint('Failed to decode image');
+        return null;
+      }
+      return image;
+    } catch (e) {
+      debugPrint('Error loading logo image: $e');
+      return null;
+    }
+  }
 
   // Get list of available printers
   static Future<List<Printer>> getAvailablePrinters() async {
     try {
       await _printer.getPrinters();
-      // Wait for printers to be discovered
       final printers = <Printer>[];
       await for (final printerList in _printer.devicesStream.take(1)) {
         printers.addAll(printerList);
@@ -38,10 +56,9 @@ class ThermalPrintService {
       await prefs.setString('printer_address', printer.address ?? '');
       await prefs.setString('printer_name', printer.name ?? '');
 
-      // Keep the same printer object to maintain connection
       if (_selectedPrinter?.address != printer.address) {
         _selectedPrinter = printer;
-        _isConnected = false; // Reset connection for new printer
+        _isConnected = false;
       }
 
       debugPrint('Printer saved: ${printer.name}');
@@ -50,26 +67,21 @@ class ThermalPrintService {
     }
   }
 
-  // Get saved printer - return existing instance if available
+  // Get saved printer
   static Future<Printer?> getSavedPrinter() async {
     try {
-      // If we already have a printer instance, return it
       if (_selectedPrinter != null) {
         debugPrint(
             'Returning existing printer instance: ${_selectedPrinter!.name}');
         return _selectedPrinter;
       }
 
-      // Otherwise load from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final address = prefs.getString('printer_address');
       final name = prefs.getString('printer_name');
 
       if (address != null && name != null) {
-        _selectedPrinter = Printer(
-          address: address,
-          name: name,
-        );
+        _selectedPrinter = Printer(address: address, name: name);
         debugPrint('Loaded printer from storage: $name');
         return _selectedPrinter;
       }
@@ -85,10 +97,9 @@ class ThermalPrintService {
     _isConnected = false;
   }
 
-  // Connect to printer with improved logic
+  // Connect to printer
   static Future<bool> connectPrinter(Printer printer) async {
     try {
-      // Check if already connected to this printer
       if (_isConnected &&
           _selectedPrinter?.address == printer.address &&
           _lastConnectionAttempt != null &&
@@ -98,7 +109,6 @@ class ThermalPrintService {
         return true;
       }
 
-      // Disconnect first before reconnecting
       try {
         await _printer.disconnect(printer);
         await Future.delayed(const Duration(milliseconds: 300));
@@ -139,10 +149,9 @@ class ThermalPrintService {
     }
   }
 
-  // Ensure printer is connected with smart reconnection
+  // Ensure connected
   static Future<bool> ensureConnected() async {
     if (_selectedPrinter == null) {
-      // Try to load saved printer
       _selectedPrinter = await getSavedPrinter();
       if (_selectedPrinter == null) {
         debugPrint('No printer selected');
@@ -150,7 +159,6 @@ class ThermalPrintService {
       }
     }
 
-    // Check if recently connected (within 30 seconds)
     if (_isConnected &&
         _lastConnectionAttempt != null &&
         DateTime.now().difference(_lastConnectionAttempt!) <
@@ -160,7 +168,6 @@ class ThermalPrintService {
       return true;
     }
 
-    // Try to connect
     debugPrint('Attempting to connect to printer...');
     final connected = await connectPrinter(_selectedPrinter!);
 
@@ -183,12 +190,10 @@ class ThermalPrintService {
       }
 
       debugPrint('Creating print data...');
-      // Create ESC/POS commands
       final profile = await CapabilityProfile.load();
-      final generator = Generator(PaperSize.mm80, profile);
+      final generator = Generator(PaperSize.mm58, profile);
       List<int> bytes = [];
 
-      // Print test content
       bytes += generator.text('================================',
           styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('TEST PRINT',
@@ -198,13 +203,13 @@ class ThermalPrintService {
             width: PosTextSize.size2,
             bold: true,
           ));
-      bytes += generator.text('ORDERKUY!',
-          styles: const PosStyles(
-            align: PosAlign.center,
-            height: PosTextSize.size2,
-            width: PosTextSize.size2,
-            bold: true,
-          ));
+
+      // Load and print logo image
+      final logoImage = await _loadLogoImage();
+      if (logoImage != null) {
+        bytes += generator.imageRaster(logoImage, align: PosAlign.center);
+      }
+
       bytes += generator.text('================================',
           styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('Printer berhasil terhubung',
@@ -212,8 +217,8 @@ class ThermalPrintService {
       bytes += generator.text(DateTime.now().toString().substring(0, 19),
           styles: const PosStyles(align: PosAlign.center));
       bytes += generator.feed(3);
+      bytes += generator.cut();
 
-      // Send to printer
       debugPrint('Sending to printer...');
       await _printer.printData(_selectedPrinter!, bytes);
 
@@ -238,101 +243,245 @@ class ThermalPrintService {
     String? catatan,
     int? metodeBayar,
     String? kasirNama,
+    String? tokoAlamat,
+    String? tokoTelepon,
   }) async {
     try {
       debugPrint('=== Starting Receipt Print ===');
+      debugPrint('Toko: $tokoNama');
+      debugPrint('Kasir: ${kasirNama ?? "NULL"}');
+      debugPrint('Alamat: ${tokoAlamat ?? "NULL"}');
+
       if (!await ensureConnected()) {
         debugPrint('Failed to connect to printer');
         return false;
       }
 
       debugPrint('Creating receipt data...');
-      // Create ESC/POS commands
       final profile = await CapabilityProfile.load();
-      final generator = Generator(PaperSize.mm80, profile);
+      final generator = Generator(PaperSize.mm58, profile);
       List<int> bytes = [];
 
-      // Header
-      bytes += generator.text('================================');
+      // Logo/Brand
+      final logoImage = await _loadLogoImage();
+      if (logoImage != null) {
+        bytes += generator.imageRaster(logoImage, align: PosAlign.center);
+      }
+
+      bytes += generator.emptyLines(1);
+
+      // Header - Nama Toko
       bytes += generator.text(tokoNama,
           styles: const PosStyles(
             align: PosAlign.center,
-            height: PosTextSize.size2,
-            width: PosTextSize.size2,
             bold: true,
+            height: PosTextSize.size3,
+            width: PosTextSize.size3,
           ));
-      bytes += generator.text('STRUK PEMBELIAN',
+
+      // Alamat Toko
+      if (tokoAlamat != null && tokoAlamat.isNotEmpty) {
+        bytes += generator.text(tokoAlamat,
+            styles: const PosStyles(align: PosAlign.center));
+      }
+
+      // Telepon Toko
+      if (tokoTelepon != null && tokoTelepon.isNotEmpty) {
+        bytes += generator.text('Telp: $tokoTelepon',
+            styles: const PosStyles(align: PosAlign.center));
+      }
+
+      bytes += generator.text('================================',
           styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('================================');
 
       // Info Pesanan
-      bytes += generator.text('No Order: $orderId');
-      bytes += generator
-          .text('Tanggal: ${DateTime.now().toString().substring(0, 19)}');
+      final now = DateTime.now();
+      final dateStr =
+          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-      if (jenisOrder == 1 && mejaNo != null) {
-        bytes += generator.text('Meja: $mejaNo');
-        bytes += generator.text('Jenis: Dine In');
-      } else {
-        bytes += generator.text('Jenis: Take Away');
+      // No. Nota
+      bytes += generator.row([
+        PosColumn(
+            text: 'No. Nota:',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: '#${orderId.padLeft(6, '0')}',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+
+      // Tanggal
+      bytes += generator.row([
+        PosColumn(
+            text: 'Tanggal:',
+            width: 4,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: dateStr,
+            width: 8,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+
+      // Kasir
+      if (kasirNama != null && kasirNama.isNotEmpty) {
+        bytes += generator.row([
+          PosColumn(
+              text: 'Kasir:',
+              width: 6,
+              styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(
+              text: kasirNama,
+              width: 6,
+              styles: const PosStyles(align: PosAlign.right)),
+        ]);
       }
 
-      if (metodeBayar != null) {
-        bytes +=
-            generator.text('Bayar: ${metodeBayar == 1 ? "Cash" : "Transfer"}');
+      // Jenis Order
+      bytes += generator.row([
+        PosColumn(
+            text: 'Jenis:',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: jenisOrder == 1 ? 'Dine In' : 'Take Away',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+
+      // Meja
+      if (jenisOrder == 1 && mejaNo != null && mejaNo.isNotEmpty) {
+        bytes += generator.row([
+          PosColumn(
+              text: 'Meja:',
+              width: 6,
+              styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(
+              text: mejaNo,
+              width: 6,
+              styles: const PosStyles(align: PosAlign.right)),
+        ]);
       }
 
-      bytes += generator.text('================================');
+      // Items Section
+      bytes += generator.text('--------------------------------',
+          styles: const PosStyles(align: PosAlign.center));
 
-      // Items
-      bytes += generator.text('PESANAN',
-          styles: const PosStyles(align: PosAlign.center, bold: true));
-      bytes += generator.text('--------------------------------');
-
+      double subtotal = 0;
       for (var item in items) {
         final nama = item['nama_produk'] ?? '';
         final qty = item['qty'] ?? 0;
         final harga = (item['harga'] is double)
             ? item['harga'] as double
-            : double.parse(item['harga'].toString());
-        final subtotal = qty * harga;
+            : double.tryParse(item['harga'].toString()) ?? 0.0;
+        final itemTotal = qty * harga;
+        subtotal += itemTotal;
 
-        // Nama produk
-        bytes += generator.text(nama);
+        // Nama produk - BOLD
+        bytes += generator.text(nama,
+            styles: const PosStyles(bold: true, align: PosAlign.left));
 
-        // Qty x Harga = Subtotal
-        final line =
-            '  $qty x ${_formatRupiah(harga)} = ${_formatRupiah(subtotal)}';
-        bytes += generator.text(line);
+        // Qty x Harga = Total
+        bytes += generator.row([
+          PosColumn(
+            text: '$qty x ${_formatRupiah(harga)}',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left),
+          ),
+          PosColumn(
+            text: _formatRupiah(itemTotal),
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right),
+          ),
+        ]);
       }
 
-      bytes += generator.text('================================');
+      bytes += generator.text('--------------------------------',
+          styles: const PosStyles(align: PosAlign.center));
 
-      // Total
-      bytes += generator.text('TOTAL: ${_formatRupiah(totalHarga)}',
-          styles: const PosStyles(
-            align: PosAlign.center,
-            height: PosTextSize.size2,
-            width: PosTextSize.size2,
-            bold: true,
-          ));
+      // Subtotal
+      bytes += generator.row([
+        PosColumn(
+            text: 'Subtotal:',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: _formatRupiah(subtotal),
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
 
-      bytes += generator.text('================================');
-
-      // Catatan
-      if (catatan != null && catatan.isNotEmpty) {
-        bytes += generator.text('Catatan:');
-        bytes += generator.text(catatan);
-        bytes += generator.text('================================');
+      // Pajak/Diskon
+      if ((totalHarga - subtotal).abs() > 0.01) {
+        final difference = totalHarga - subtotal;
+        if (difference > 0) {
+          bytes += generator.row([
+            PosColumn(
+                text: 'Pajak/Biaya:',
+                width: 6,
+                styles: const PosStyles(align: PosAlign.left)),
+            PosColumn(
+                text: _formatRupiah(difference),
+                width: 6,
+                styles: const PosStyles(align: PosAlign.right)),
+          ]);
+        } else if (difference < 0) {
+          bytes += generator.row([
+            PosColumn(
+                text: 'Diskon:',
+                width: 6,
+                styles: const PosStyles(align: PosAlign.left)),
+            PosColumn(
+                text: '-${_formatRupiah(difference.abs())}',
+                width: 6,
+                styles: const PosStyles(align: PosAlign.right)),
+          ]);
+        }
       }
+
+      // Separator
+      bytes += generator.text('================================',
+          styles: const PosStyles(align: PosAlign.center));
+
+      // TOTAL
+      bytes += generator.row([
+        PosColumn(
+          text: 'TOTAL:',
+          width: 6,
+          styles: const PosStyles(align: PosAlign.left, bold: true),
+        ),
+        PosColumn(
+          text: _formatRupiah(totalHarga),
+          width: 6,
+          styles: const PosStyles(align: PosAlign.right, bold: true),
+        ),
+      ]);
+
+      bytes += generator.text('================================',
+          styles: const PosStyles(align: PosAlign.center));
 
       // Footer
-      bytes += generator.text('TERIMA KASIH',
-          styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.text('Terima Kasih',
+          styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('Selamat Menikmati',
           styles: const PosStyles(align: PosAlign.center));
 
+      bytes += generator.text('================================',
+          styles: const PosStyles(align: PosAlign.center));
+
+      bytes += generator.text('Powered by OrderKuy!',
+          styles: const PosStyles(align: PosAlign.center));
+
+      final footerDate =
+          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+      bytes += generator.text(footerDate,
+          styles: const PosStyles(align: PosAlign.center));
+
+      bytes += generator.text('================================',
+          styles: const PosStyles(align: PosAlign.center));
+
       bytes += generator.feed(3);
+      bytes += generator.cut();
 
       // Send to printer
       debugPrint('Sending receipt to printer...');
@@ -367,7 +516,7 @@ class ThermalPrintService {
     return _selectedPrinter;
   }
 
-  // Clear connection state (untuk force reconnect)
+  // Clear connection state
   static void clearConnectionState() {
     _isConnected = false;
     _lastConnectionAttempt = null;

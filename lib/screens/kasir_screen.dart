@@ -5,7 +5,6 @@ import '../models/product.dart';
 import '../models/meja.dart';
 import '../models/order.dart';
 import '../utils/constants.dart';
-import 'pesanan_screen.dart';
 import 'printer_setup_screen.dart';
 
 class KasirScreen extends StatefulWidget {
@@ -334,7 +333,7 @@ class _KasirScreenState extends State<KasirScreen> {
         : await ApiService.createOrder(orderData);
 
     if (!mounted) return;
-    Navigator.pop(context);
+    Navigator.pop(context); // Close loading dialog
 
     if (result['success']) {
       // Print receipt
@@ -344,7 +343,7 @@ class _KasirScreenState extends State<KasirScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(isEditing
-                ? 'Pesanan berhasil diperbarui'
+                ? 'Pesanan berhasil diperbarui dan struk dicetak'
                 : 'Pesanan berhasil disimpan dan struk dicetak'),
             backgroundColor: Colors.green,
           ),
@@ -364,11 +363,11 @@ class _KasirScreenState extends State<KasirScreen> {
         });
       }
 
+      // PERBAIKAN: Gunakan Navigator.pop() untuk kembali ke screen sebelumnya
+      // Jangan gunakan pushAndRemoveUntil
       if (mounted) {
-        Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const PesananScreen()),
-            (route) => false);
+        // Pop KasirScreen, kembali ke PesananScreen atau Dashboard
+        Navigator.pop(context);
       }
     } else {
       if (mounted) {
@@ -413,18 +412,22 @@ class _KasirScreenState extends State<KasirScreen> {
       final tokoNama =
           orderData['toko']?['nama_toko']?.toString() ?? 'OrderKuy';
 
+      final tokoAlamat = orderData['toko']?['alamat']?.toString() ?? '-';
+
       await ThermalPrintService.printReceipt(
-          orderId: orderData['id']?.toString() ?? '',
-          tokoNama: tokoNama,
-          items: _selectedItems,
-          totalHarga: _totalHarga,
-          jenisOrder: _jenisOrder,
-          mejaNo: _jenisOrder == Constants.jenisOrderDineIn
-              ? _mejas.firstWhere((m) => m.id == _selectedMejaId).noMeja
-              : null,
-          catatan: _catatan,
-          metodeBayar: _metodeBayar,
-          kasirNama: kasirNama);
+        orderId: orderData['id']?.toString() ?? '',
+        tokoNama: tokoNama,
+        tokoAlamat: tokoAlamat,
+        items: _selectedItems,
+        totalHarga: _totalHarga,
+        jenisOrder: _jenisOrder,
+        mejaNo: _jenisOrder == Constants.jenisOrderDineIn
+            ? _mejas.firstWhere((m) => m.id == _selectedMejaId).noMeja
+            : null,
+        catatan: _catatan,
+        metodeBayar: _metodeBayar,
+        kasirNama: kasirNama,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -436,166 +439,246 @@ class _KasirScreenState extends State<KasirScreen> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.orderToEdit != null;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isEditing ? 'Edit Pesanan' : 'Kasir',
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        elevation: 10,
-        shadowColor: Colors.red.withValues(alpha: 0.5),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.print, color: Colors.white),
-            onPressed: () async {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const PrinterSetupScreen(),
+
+    return PopScope(
+      canPop: false, // Prevent default back behavior
+      onPopInvoked: (bool didPop) async {
+        if (didPop) return;
+
+        // Show confirmation if there are items in cart
+        if (_selectedItems.isNotEmpty) {
+          final shouldPop = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Konfirmasi'),
+              content: const Text(
+                'Ada item di keranjang. Yakin ingin keluar?\nData akan hilang.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Batal'),
                 ),
-              );
-            },
-            tooltip: 'Setup Printer',
-          ),
-        ],
-      ),
-      body: Row(
-        children: [
-          // Left: Product List
-          Expanded(
-            flex: 3,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      labelText: 'Cari Produk',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.search, color: Colors.red[700]),
-                    ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
                   ),
-                ),
-                Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _filteredProducts.isEmpty
-                          ? const Center(child: Text('Tidak ada menu'))
-                          : GridView.builder(
-                              padding: const EdgeInsets.all(8),
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                childAspectRatio: 0.75,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                              ),
-                              itemCount: _filteredProducts.length,
-                              itemBuilder: (context, index) {
-                                final product = _filteredProducts[index];
-                                return _buildProductCard(product);
-                              },
-                            ),
+                  child: const Text('Ya, Keluar'),
                 ),
               ],
             ),
-          ),
+          );
 
-          // Right: Order Form
-          Expanded(
-            flex: 2,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.red[50]!,
-                    Colors.red[100]!,
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    spreadRadius: 2,
-                    blurRadius: 8,
-                    offset: const Offset(-2, 0),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildOrderTypeSelector(),
-                    const SizedBox(height: 16),
-                    _buildPaymentMethodSelector(),
-                    const SizedBox(height: 16),
-                    if (_jenisOrder == Constants.jenisOrderDineIn)
-                      _buildTableSelector(),
-                    const SizedBox(height: 16),
-                    _buildNotesField(),
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const Text(
-                      'Item Dipilih',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+          if (shouldPop == true && context.mounted) {
+            Navigator.pop(context);
+          }
+        } else {
+          // No items, just pop
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          // PERBAIKAN: Tambahkan leading untuk handle back button
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () async {
+              // Show confirmation if there are items in cart
+              if (_selectedItems.isNotEmpty) {
+                final shouldPop = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Konfirmasi'),
+                    content: const Text(
+                      'Ada item di keranjang. Yakin ingin keluar?\nData akan hilang.',
                     ),
-                    const SizedBox(height: 8),
-                    _buildCartItems(),
-                    const SizedBox(height: 16),
-                    _buildTotals(),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _showPaymentDialog,
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Batal'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFD32F2F),
+                          backgroundColor: Colors.red,
                           foregroundColor: Colors.white,
-                          elevation: 5,
-                          shadowColor: Colors.red.withValues(alpha: 0.3),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ).copyWith(
-                          backgroundColor:
-                              WidgetStateProperty.resolveWith<Color>(
-                            (Set<WidgetState> states) {
-                              if (states.contains(WidgetState.hovered)) {
-                                return const Color(0xFFB71C1C);
-                              }
-                              return const Color(0xFFD32F2F);
-                            },
-                          ),
                         ),
-                        child: Text(
-                          isEditing ? 'Update & Simpan' : 'Bayar & Simpan',
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        child: const Text('Ya, Keluar'),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                );
+
+                if (shouldPop == true && mounted) {
+                  Navigator.pop(context);
+                }
+              } else {
+                // No items, just pop
+                Navigator.pop(context);
+              }
+            },
+          ),
+          title: Text(isEditing ? 'Edit Pesanan' : 'Kasir',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold)),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
           ),
-        ],
+          elevation: 10,
+          shadowColor: Colors.red.withValues(alpha: 0.5),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.print, color: Colors.white),
+              onPressed: () async {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PrinterSetupScreen(),
+                  ),
+                );
+              },
+              tooltip: 'Setup Printer',
+            ),
+          ],
+        ),
+        body: Row(
+          children: [
+            // Left: Product List
+            Expanded(
+              flex: 3,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        labelText: 'Cari Produk',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.search, color: Colors.red[700]),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _filteredProducts.isEmpty
+                            ? const Center(child: Text('Tidak ada menu'))
+                            : GridView.builder(
+                                padding: const EdgeInsets.all(8),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  childAspectRatio: 0.75,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                ),
+                                itemCount: _filteredProducts.length,
+                                itemBuilder: (context, index) {
+                                  final product = _filteredProducts[index];
+                                  return _buildProductCard(product);
+                                },
+                              ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Right: Order Form
+            Expanded(
+              flex: 2,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.red[50]!,
+                      Colors.red[100]!,
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      spreadRadius: 2,
+                      blurRadius: 8,
+                      offset: const Offset(-2, 0),
+                    ),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildOrderTypeSelector(),
+                      const SizedBox(height: 16),
+                      _buildPaymentMethodSelector(),
+                      const SizedBox(height: 16),
+                      if (_jenisOrder == Constants.jenisOrderDineIn)
+                        _buildTableSelector(),
+                      const SizedBox(height: 16),
+                      _buildNotesField(),
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const Text(
+                        'Item Dipilih',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildCartItems(),
+                      const SizedBox(height: 16),
+                      _buildTotals(),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _showPaymentDialog,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD32F2F),
+                            foregroundColor: Colors.white,
+                            elevation: 5,
+                            shadowColor: Colors.red.withValues(alpha: 0.3),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ).copyWith(
+                            backgroundColor:
+                                WidgetStateProperty.resolveWith<Color>(
+                              (Set<WidgetState> states) {
+                                if (states.contains(WidgetState.hovered)) {
+                                  return const Color(0xFFB71C1C);
+                                }
+                                return const Color(0xFFD32F2F);
+                              },
+                            ),
+                          ),
+                          child: Text(
+                            isEditing ? 'Update & Simpan' : 'Bayar & Simpan',
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

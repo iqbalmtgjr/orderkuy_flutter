@@ -21,8 +21,8 @@ class User {
       name: json['name'],
       email: json['email'],
       role: json['role'],
-      tokoId: json['toko_id'],
-      tokoNama: json['toko_nama'],
+      tokoId: json['toko']?['nama_toko'] != null ? json['toko']['id'] : null,
+      tokoNama: json['toko'],
     );
   }
 

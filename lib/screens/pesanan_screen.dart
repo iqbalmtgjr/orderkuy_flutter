@@ -174,7 +174,7 @@ class _PesananScreenState extends State<PesananScreen> {
 
       final success = await ThermalPrintService.printReceipt(
         orderId: order.id.toString(),
-        tokoNama: order.toko.nama_toko ?? 'OrderKuy',
+        tokoNama: order.tokoNama ?? 'OrderKuy', // Use from order data
         items: items,
         totalHarga: order.totalHarga,
         jenisOrder: order.jenisOrder,
@@ -183,7 +183,8 @@ class _PesananScreenState extends State<PesananScreen> {
             : null,
         catatan: order.catatan,
         metodeBayar: order.metodeBayar,
-        kasirNama: order.kasirNama, // Add kasir name from order
+        kasirNama: order.kasirNama,
+        tokoAlamat: order.tokoAlamat,
       );
 
       if (!mounted) return;

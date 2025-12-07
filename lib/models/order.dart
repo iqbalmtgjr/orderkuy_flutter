@@ -15,6 +15,7 @@ class Order {
   // New fields for kasir and toko info
   final String? kasirNama;
   final String? tokoNama;
+  final String? tokoAlamat;
 
   Order({
     required this.id,
@@ -31,6 +32,7 @@ class Order {
     required this.createdAt,
     this.kasirNama,
     this.tokoNama,
+    this.tokoAlamat,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -62,6 +64,7 @@ class Order {
       kasirNama: json['user']?['name']?.toString(),
       // Toko name from toko.nama_toko column
       tokoNama: json['toko']?['nama_toko']?.toString(),
+      tokoAlamat: json['toko']?['alamat']?.toString(),
     );
   }
 
@@ -79,6 +82,7 @@ class Order {
       'created_at': createdAt.toIso8601String(),
       'kasir_nama': kasirNama,
       'toko_nama': tokoNama,
+      'toko_alamat': tokoAlamat,
     };
   }
 
