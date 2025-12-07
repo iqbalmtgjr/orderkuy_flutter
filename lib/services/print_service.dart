@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_thermal_printer/flutter_thermal_printer.dart';
 import 'package:flutter_thermal_printer/utils/printer.dart';
-import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThermalPrintService {
@@ -11,42 +9,10 @@ class ThermalPrintService {
   static bool _isConnected = false;
   static DateTime? _lastConnectionAttempt;
 
-  // Singleton pattern
+  // Singleton pattern untuk maintain connection state
   static final ThermalPrintService _instance = ThermalPrintService._internal();
   factory ThermalPrintService() => _instance;
   ThermalPrintService._internal();
-
-  // Load logo image from assets
-  static Future<img.Image?> _loadLogoImage() async {
-    try {
-      final ByteData data = await rootBundle.load('assets/icon/orderkuy.png');
-      final Uint8List bytes = data.buffer.asUint8List();
-      final img.Image? image = img.decodeImage(bytes);
-      if (image == null) {
-        debugPrint('Failed to decode image');
-        return null;
-      }
-
-      // Convert to grayscale for thermal printer compatibility
-      img.Image processedImage = img.grayscale(image);
-
-      // Resize image if too wide for thermal printer (max ~48mm width at 203 DPI ≈ 380 pixels)
-      const int maxWidth = 380;
-      if (processedImage.width > maxWidth) {
-        final aspectRatio = processedImage.height / processedImage.width;
-        final newHeight = (maxWidth * aspectRatio).round();
-        processedImage =
-            img.copyResize(processedImage, width: maxWidth, height: newHeight);
-        debugPrint(
-            'Resized logo from ${image.width}x${image.height} to ${processedImage.width}x${processedImage.height}');
-      }
-
-      return processedImage;
-    } catch (e) {
-      debugPrint('Error loading logo image: $e');
-      return null;
-    }
-  }
 
   // Get list of available printers
   static Future<List<Printer>> getAvailablePrinters() async {
@@ -218,13 +184,13 @@ class ThermalPrintService {
             width: PosTextSize.size2,
             bold: true,
           ));
-
-      // Load and print logo image
-      final logoImage = await _loadLogoImage();
-      if (logoImage != null) {
-        bytes += generator.imageRaster(logoImage, align: PosAlign.center);
-      }
-
+      bytes += generator.text('ORDERKUY!',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+            bold: true,
+          ));
       bytes += generator.text('================================',
           styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('Printer berhasil terhubung',
@@ -247,7 +213,7 @@ class ThermalPrintService {
     }
   }
 
-  // Print receipt/struk
+  // Print receipt/struk - NEW FORMAT
   static Future<bool> printReceipt({
     required String orderId,
     required String tokoNama,
@@ -262,7 +228,7 @@ class ThermalPrintService {
     String? tokoTelepon,
   }) async {
     try {
-      debugPrint('=== Starting Receipt Print ===');
+      debugPrint('=== Starting Receipt Print (NEW FORMAT) ===');
       debugPrint('Toko: $tokoNama');
       debugPrint('Kasir: ${kasirNama ?? "NULL"}');
       debugPrint('Alamat: ${tokoAlamat ?? "NULL"}');
@@ -277,11 +243,14 @@ class ThermalPrintService {
       final generator = Generator(PaperSize.mm58, profile);
       List<int> bytes = [];
 
-      // Logo/Brand
-      final logoImage = await _loadLogoImage();
-      if (logoImage != null) {
-        bytes += generator.imageRaster(logoImage, align: PosAlign.center);
-      }
+      // Logo/Brand - BESAR
+      bytes += generator.text('OrderKuy!',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+            bold: true,
+          ));
 
       bytes += generator.emptyLines(1);
 
@@ -290,8 +259,6 @@ class ThermalPrintService {
           styles: const PosStyles(
             align: PosAlign.center,
             bold: true,
-            height: PosTextSize.size3,
-            width: PosTextSize.size3,
           ));
 
       // Alamat Toko
@@ -309,7 +276,7 @@ class ThermalPrintService {
       bytes += generator.text('================================',
           styles: const PosStyles(align: PosAlign.center));
 
-      // Info Pesanan
+      // Info Pesanan - Format Web Style
       final now = DateTime.now();
       final dateStr =
           '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
@@ -364,8 +331,8 @@ class ThermalPrintService {
             styles: const PosStyles(align: PosAlign.right)),
       ]);
 
-      // Meja
-      if (jenisOrder == 1 && mejaNo != null && mejaNo.isNotEmpty) {
+      // Meja (jika Dine In)
+      if (jenisOrder == 1 && mejaNo != null) {
         bytes += generator.row([
           PosColumn(
               text: 'Meja:',
@@ -388,7 +355,7 @@ class ThermalPrintService {
         final qty = item['qty'] ?? 0;
         final harga = (item['harga'] is double)
             ? item['harga'] as double
-            : double.tryParse(item['harga'].toString()) ?? 0.0;
+            : double.parse(item['harga'].toString());
         final itemTotal = qty * harga;
         subtotal += itemTotal;
 
@@ -426,7 +393,7 @@ class ThermalPrintService {
             styles: const PosStyles(align: PosAlign.right)),
       ]);
 
-      // Pajak/Diskon
+      // Pajak/Diskon (jika ada perbedaan)
       if ((totalHarga - subtotal).abs() > 0.01) {
         final difference = totalHarga - subtotal;
         if (difference > 0) {
@@ -458,7 +425,7 @@ class ThermalPrintService {
       bytes += generator.text('================================',
           styles: const PosStyles(align: PosAlign.center));
 
-      // TOTAL
+      // TOTAL - BOLD & BESAR
       bytes += generator.row([
         PosColumn(
           text: 'TOTAL:',
@@ -499,10 +466,10 @@ class ThermalPrintService {
       bytes += generator.cut();
 
       // Send to printer
-      debugPrint('Sending receipt to printer...');
+      debugPrint('Sending NEW FORMAT receipt to printer...');
       await _printer.printData(_selectedPrinter!, bytes);
 
-      debugPrint('Receipt printed successfully');
+      debugPrint('Receipt printed successfully with NEW FORMAT');
       return true;
     } catch (e) {
       debugPrint('Error printing receipt: $e');
