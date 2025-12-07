@@ -69,6 +69,7 @@ class _PesananScreenState extends State<PesananScreen> {
     if (confirm == true) {
       // Show loading
       showDialog(
+        // ignore: use_build_context_synchronously
         context: context,
         barrierDismissible: false,
         builder: (context) => const Center(child: CircularProgressIndicator()),

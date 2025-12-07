@@ -42,6 +42,45 @@ class ApiService {
     }
   }
 
+  // Dashboard
+  static Future<Map<String, dynamic>> getDashboardStats() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        return {
+          'success': false,
+          'message': 'Token tidak ditemukan',
+        };
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/dashboard'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return data;
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Gagal memuat data',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: $e',
+      };
+    }
+  }
+
   // Get Menu/Products
   static Future<List<Product>> getMenus() async {
     try {
@@ -157,6 +196,7 @@ class ApiService {
           debugPrint('Order ID: ${orders[0].id}');
           debugPrint('Kasir: ${orders[0].kasirNama ?? "NULL"}');
           debugPrint('Toko: ${orders[0].tokoNama ?? "NULL"}');
+          debugPrint('Alamat: ${orders[0].tokoAlamat ?? "NULL"}');
           debugPrint('=======================');
         }
 
@@ -190,6 +230,21 @@ class ApiService {
         body: jsonEncode(orderData),
       );
 
+      // Check if response is HTML error page
+      if (response.body.trim().startsWith('<!DOCTYPE') ||
+          response.body.trim().startsWith('<html')) {
+        debugPrint('=== SERVER ERROR RESPONSE ===');
+        debugPrint('Status Code: ${response.statusCode}');
+        debugPrint('Response Body: ${response.body.substring(0, 500)}...');
+        debugPrint('============================');
+
+        return {
+          'success': false,
+          'message':
+              'Server error: ${response.statusCode}. Silakan coba lagi atau hubungi administrator.',
+        };
+      }
+
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -200,8 +255,10 @@ class ApiService {
           debugPrint('Order ID: ${responseData['data']['id']}');
           debugPrint('Kasir: ${responseData['data']['user']?['name']}');
           debugPrint('Toko: ${responseData['data']['toko']?['nama_toko']}');
+          debugPrint('Alamat: ${responseData['data']['toko']?['alamat']}');
         }
         debugPrint('============================');
+        debugPrint(jsonDecode(response.body).toString());
 
         return {
           'success': true,
@@ -241,6 +298,21 @@ class ApiService {
         body: jsonEncode(orderData),
       );
 
+      // Check if response is HTML error page
+      if (response.body.trim().startsWith('<!DOCTYPE') ||
+          response.body.trim().startsWith('<html')) {
+        debugPrint('=== SERVER ERROR RESPONSE (UPDATE) ===');
+        debugPrint('Status Code: ${response.statusCode}');
+        debugPrint('Response Body: ${response.body.substring(0, 200)}...');
+        debugPrint('============================');
+
+        return {
+          'success': false,
+          'message':
+              'Server error: ${response.statusCode}. Silakan coba lagi atau hubungi administrator.',
+        };
+      }
+
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
@@ -278,6 +350,21 @@ class ApiService {
         },
       );
 
+      // Check if response is HTML error page
+      if (response.body.trim().startsWith('<!DOCTYPE') ||
+          response.body.trim().startsWith('<html')) {
+        debugPrint('=== SERVER ERROR RESPONSE (COMPLETE) ===');
+        debugPrint('Status Code: ${response.statusCode}');
+        debugPrint('Response Body: ${response.body.substring(0, 200)}...');
+        debugPrint('============================');
+
+        return {
+          'success': false,
+          'message':
+              'Server error: ${response.statusCode}. Silakan coba lagi atau hubungi administrator.',
+        };
+      }
+
       if (response.statusCode == 200) {
         return {'success': true, 'message': 'Pesanan selesai'};
       } else {
@@ -309,6 +396,16 @@ class ApiService {
           'Authorization': 'Bearer $token',
         },
       );
+
+      // Check if response is HTML error page
+      if (response.body.trim().startsWith('<!DOCTYPE') ||
+          response.body.trim().startsWith('<html')) {
+        debugPrint('=== SERVER ERROR RESPONSE (DETAIL) ===');
+        debugPrint('Status Code: ${response.statusCode}');
+        debugPrint('Response Body: ${response.body.substring(0, 200)}...');
+        debugPrint('============================');
+        return null;
+      }
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

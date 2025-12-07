@@ -26,7 +26,22 @@ class ThermalPrintService {
         debugPrint('Failed to decode image');
         return null;
       }
-      return image;
+
+      // Convert to grayscale for thermal printer compatibility
+      img.Image processedImage = img.grayscale(image);
+
+      // Resize image if too wide for thermal printer (max ~48mm width at 203 DPI ≈ 380 pixels)
+      const int maxWidth = 380;
+      if (processedImage.width > maxWidth) {
+        final aspectRatio = processedImage.height / processedImage.width;
+        final newHeight = (maxWidth * aspectRatio).round();
+        processedImage =
+            img.copyResize(processedImage, width: maxWidth, height: newHeight);
+        debugPrint(
+            'Resized logo from ${image.width}x${image.height} to ${processedImage.width}x${processedImage.height}');
+      }
+
+      return processedImage;
     } catch (e) {
       debugPrint('Error loading logo image: $e');
       return null;

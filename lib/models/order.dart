@@ -45,27 +45,26 @@ class Order {
     }
 
     return Order(
-      id: json['id'],
-      tokoId: json['toko_id'],
-      userId: json['user_id'],
-      mejaId: json['meja_id'],
-      mejaNo: json['meja']?['no_meja']?.toString(),
-      jenisOrder: json['jenis_order'] ?? 1,
-      metodeBayar: json['metode_bayar'] ?? 1,
-      catatan: json['catatan']?.toString(),
-      totalHarga: double.parse(json['total_harga'].toString()),
-      status: json['status']?.toString() ?? 'pending',
-      items: itemsList,
-      createdAt: json['created_at'] is int
-          ? DateTime.fromMillisecondsSinceEpoch(json['created_at'] * 1000)
-          : DateTime.parse(json['created_at'].toString()),
-      // Parse kasir and toko info
-      // Kasir name from users.name column
-      kasirNama: json['user']?['name']?.toString(),
-      // Toko name from toko.nama_toko column
-      tokoNama: json['toko']?['nama_toko']?.toString(),
-      tokoAlamat: json['toko']?['alamat']?.toString(),
-    );
+        id: json['id'],
+        tokoId: json['toko_id'],
+        userId: json['user_id'],
+        mejaId: json['meja_id'],
+        mejaNo: json['meja']?['no_meja']?.toString(),
+        jenisOrder: json['jenis_order'] ?? 1,
+        metodeBayar: json['metode_bayar'] ?? 1,
+        catatan: json['catatan']?.toString(),
+        totalHarga: double.parse(json['total_harga'].toString()),
+        status: json['status']?.toString() ?? 'pending',
+        items: itemsList,
+        createdAt: json['created_at'] is int
+            ? DateTime.fromMillisecondsSinceEpoch(json['created_at'] * 1000)
+            : DateTime.parse(json['created_at'].toString()),
+        // Parse kasir and toko info
+        // Kasir name from users.name column
+        kasirNama: json['user']?['name']?.toString(),
+        // Toko name from toko.nama_toko column
+        tokoNama: json['toko']?['nama_toko']?.toString(),
+        tokoAlamat: json['toko']?['alamat']?.toString());
   }
 
   Map<String, dynamic> toJson() {
@@ -82,7 +81,7 @@ class Order {
       'created_at': createdAt.toIso8601String(),
       'kasir_nama': kasirNama,
       'toko_nama': tokoNama,
-      'toko_alamat': tokoAlamat,
+      'toko_alamat': tokoAlamat
     };
   }
 

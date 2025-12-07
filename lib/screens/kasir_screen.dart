@@ -34,8 +34,7 @@ class _KasirScreenState extends State<KasirScreen> {
 
   // Payment
   final TextEditingController _nominalBayarController = TextEditingController();
-  final TextEditingController _searchController =
-      TextEditingController(); // Tambahkan ini
+  final TextEditingController _searchController = TextEditingController();
   final TextEditingController _catatanController = TextEditingController();
   double _kembalian = 0;
 
@@ -412,12 +411,12 @@ class _KasirScreenState extends State<KasirScreen> {
       final tokoNama =
           orderData['toko']?['nama_toko']?.toString() ?? 'OrderKuy';
 
-      final tokoAlamat = orderData['toko']?['alamat']?.toString() ?? '-';
+      // final tokoAlamat = orderData['toko']?['alamat']?.toString() ?? '-';
 
       await ThermalPrintService.printReceipt(
         orderId: orderData['id']?.toString() ?? '',
         tokoNama: tokoNama,
-        tokoAlamat: tokoAlamat,
+        tokoAlamat: orderData['toko']?['alamat']?.toString() ?? '-',
         items: _selectedItems,
         totalHarga: _totalHarga,
         jenisOrder: _jenisOrder,
