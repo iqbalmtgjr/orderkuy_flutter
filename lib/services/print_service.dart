@@ -114,22 +114,6 @@ class ThermalPrintService {
     }
   }
 
-  // Disconnect printer
-  static Future<void> disconnectPrinter() async {
-    try {
-      if (_selectedPrinter != null) {
-        await _printer.disconnect(_selectedPrinter!);
-        _isConnected = false;
-        _lastConnectionAttempt = null;
-        debugPrint('Printer disconnected');
-      }
-    } catch (e) {
-      debugPrint('Error disconnecting printer: $e');
-      _isConnected = false;
-      _lastConnectionAttempt = null;
-    }
-  }
-
   // Ensure connected
   static Future<bool> ensureConnected() async {
     if (_selectedPrinter == null) {
@@ -462,7 +446,7 @@ class ThermalPrintService {
       bytes += generator.text('================================',
           styles: const PosStyles(align: PosAlign.center));
 
-      bytes += generator.feed(3);
+      // bytes += generator.feed(3);
       bytes += generator.cut();
 
       // Send to printer

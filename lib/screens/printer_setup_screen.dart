@@ -142,10 +142,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text(
-              'Menyimpan dan menghubungkan printer...',
-              style: TextStyle(color: Colors.white),
-            ),
+            Text('Menghubungkan ke printer...',
+                style: TextStyle(color: Colors.white, fontSize: 14)),
           ],
         ),
       ),
@@ -212,8 +210,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
             CircularProgressIndicator(),
             SizedBox(height: 16),
             Text(
-              'Menghubungkan ke printer...',
-              style: TextStyle(color: Colors.white),
+              'Testing printer...',
+              style: TextStyle(color: Colors.white, fontSize: 12),
             ),
           ],
         ),
@@ -238,52 +236,6 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
           content: Text('Test print gagal. Cek koneksi printer.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 4),
-        ),
-      );
-    }
-  }
-
-  Future<void> _disconnectPrinter() async {
-    if (_selectedPrinter == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tidak ada printer yang terhubung'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    // Show loading
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    try {
-      await ThermalPrintService.disconnectPrinter();
-
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Printer berhasil di-disconnect'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error disconnect: $e'),
-          backgroundColor: Colors.red,
         ),
       );
     }
@@ -314,9 +266,6 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
     if (confirm == true) {
       try {
-        // Disconnect first
-        await ThermalPrintService.disconnectPrinter();
-
         // Clear saved data
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('printer_address');
@@ -577,46 +526,34 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
           if (_selectedPrinter != null)
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
+              child: Row(
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _testPrint,
-                      icon: const Icon(Icons.print),
-                      label: const Text('Test Print & Koneksi'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade700,
-                        foregroundColor: Colors.white,
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _testPrint,
+                        icon: const Icon(Icons.print),
+                        label: const Text('Test Print & Koneksi'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton.icon(
-                      onPressed: _disconnectPrinter,
-                      icon: const Icon(Icons.link_off),
-                      label: const Text('Disconnect Printer'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red.shade700,
-                        side: BorderSide(color: Colors.red.shade700),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton.icon(
-                      onPressed: _clearSavedPrinter,
-                      icon: const Icon(Icons.delete_forever),
-                      label: const Text('Hapus Printer Tersimpan'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.orange.shade700,
-                        side: BorderSide(color: Colors.orange.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: OutlinedButton.icon(
+                        onPressed: _clearSavedPrinter,
+                        icon: const Icon(Icons.delete_forever),
+                        label: const Text('Hapus Printer Tersimpan'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange.shade700,
+                          side: BorderSide(color: Colors.orange.shade700),
+                        ),
                       ),
                     ),
                   ),

@@ -164,10 +164,8 @@ class _PesananScreenState extends State<PesananScreen> {
             children: [
               CircularProgressIndicator(color: Colors.white),
               SizedBox(height: 16),
-              Text(
-                'Mencetak struk...',
-                style: TextStyle(color: Colors.white),
-              ),
+              Text('Mencetak struk...',
+                  style: TextStyle(color: Colors.white, fontSize: 14)),
             ],
           ),
         ),

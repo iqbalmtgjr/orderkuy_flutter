@@ -6,6 +6,7 @@ import '../utils/constants.dart';
 import '../models/product.dart';
 import '../models/meja.dart';
 import '../models/order.dart';
+import '../models/pengeluaran.dart';
 
 class ApiService {
   static String get baseUrl => Constants.baseUrl;
@@ -417,6 +418,232 @@ class ApiService {
     } catch (e) {
       debugPrint('Error getting order detail: $e');
       return null;
+    }
+  }
+
+  // Get Pengeluaran (Expenditures)
+  static Future<Map<String, dynamic>> getPengeluaran({
+    String? search,
+    String? tanggalAwal,
+    String? tanggalAkhir,
+    String? namaPengeluaranFilter,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(Constants.tokenKey);
+
+      String url = '$baseUrl/pengeluaran';
+      final queryParams = <String, String>{};
+
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
+      if (tanggalAwal != null && tanggalAwal.isNotEmpty) {
+        queryParams['tanggal_awal'] = tanggalAwal;
+      }
+      if (tanggalAkhir != null && tanggalAkhir.isNotEmpty) {
+        queryParams['tanggal_akhir'] = tanggalAkhir;
+      }
+      if (namaPengeluaranFilter != null && namaPengeluaranFilter.isNotEmpty) {
+        queryParams['nama_pengeluaran_filter'] = namaPengeluaranFilter;
+      }
+
+      if (queryParams.isNotEmpty) {
+        url += '?' +
+            queryParams.entries
+                .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+                .join('&');
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final pengeluaranList = data['data'] as List;
+        final pengeluaran =
+            pengeluaranList.map((item) => Pengeluaran.fromJson(item)).toList();
+
+        return {
+          'success': true,
+          'data': pengeluaran,
+          'total_pengeluaran': data['total_pengeluaran'] ?? 0,
+        };
+      } else {
+        final data = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Gagal memuat pengeluaran',
+        };
+      }
+    } catch (e) {
+      debugPrint('Error getting pengeluaran: $e');
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  // Create Pengeluaran
+  static Future<Map<String, dynamic>> createPengeluaran(
+    Map<String, dynamic> pengeluaranData,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(Constants.tokenKey);
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/pengeluaran'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(pengeluaranData),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {
+          'success': true,
+          'message':
+              responseData['message'] ?? 'Pengeluaran berhasil ditambahkan',
+          'data': responseData['data'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Gagal menambahkan pengeluaran',
+        };
+      }
+    } catch (e) {
+      debugPrint('Error creating pengeluaran: $e');
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  // Get Pengeluaran Detail
+  static Future<Map<String, dynamic>> getPengeluaranDetail(
+      int pengeluaranId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(Constants.tokenKey);
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/pengeluaran/$pengeluaranId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'data': Pengeluaran.fromJson(data['data']),
+        };
+      } else {
+        final data = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Gagal memuat detail pengeluaran',
+        };
+      }
+    } catch (e) {
+      debugPrint('Error getting pengeluaran detail: $e');
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  // Update Pengeluaran
+  static Future<Map<String, dynamic>> updatePengeluaran(
+    int pengeluaranId,
+    Map<String, dynamic> pengeluaranData,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(Constants.tokenKey);
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/pengeluaran/$pengeluaranId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(pengeluaranData),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message':
+              responseData['message'] ?? 'Pengeluaran berhasil diperbarui',
+          'data': responseData['data'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Gagal memperbarui pengeluaran',
+        };
+      }
+    } catch (e) {
+      debugPrint('Error updating pengeluaran: $e');
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  // Delete Pengeluaran
+  static Future<Map<String, dynamic>> deletePengeluaran(
+      int pengeluaranId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(Constants.tokenKey);
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/pengeluaran/$pengeluaranId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': responseData['message'] ?? 'Pengeluaran berhasil dihapus',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Gagal menghapus pengeluaran',
+        };
+      }
+    } catch (e) {
+      debugPrint('Error deleting pengeluaran: $e');
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
     }
   }
 
