@@ -449,10 +449,8 @@ class ApiService {
       }
 
       if (queryParams.isNotEmpty) {
-        url += '?' +
-            queryParams.entries
-                .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
-                .join('&');
+        url +=
+            '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
       }
 
       final response = await http.get(
@@ -469,10 +467,30 @@ class ApiService {
         final pengeluaran =
             pengeluaranList.map((item) => Pengeluaran.fromJson(item)).toList();
 
+        // Fungsi helper untuk parsing total pengeluaran yang aman
+        double parseTotalPengeluaran(dynamic value) {
+          if (value == null) return 0.0;
+          if (value is num) return value.toDouble();
+          if (value is String) {
+            // Hapus format currency jika ada (Rp, titik, koma)
+            final cleanValue = value
+                .replaceAll('Rp', '')
+                .replaceAll('.', '')
+                .replaceAll(',', '.')
+                .trim();
+            return double.tryParse(cleanValue) ?? 0.0;
+          }
+          return 0.0;
+        }
+
+        // Debug: Print response untuk troubleshooting
+        debugPrint('API Response: ${data.toString()}');
+        debugPrint('Total Pengeluaran Key: ${data['total_pengeluaran']}');
+
         return {
           'success': true,
           'data': pengeluaran,
-          'total_pengeluaran': data['total_pengeluaran'] ?? 0,
+          'total_pengeluaran': parseTotalPengeluaran(data['total_pengeluaran']),
         };
       } else {
         final data = jsonDecode(response.body);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orderkuy_kasir/screens/pengeluaran_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
@@ -209,40 +210,38 @@ class _DashboardScreenState extends State<DashboardScreen>
                           opacity: _fadeAnimation ??
                               const AlwaysStoppedAnimation(1.0),
                           child: SlideTransition(
-                            position: _slideAnimation ??
-                                const AlwaysStoppedAnimation(Offset.zero),
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Welcome Text
-                                  _buildWelcomeText(),
-                                  const SizedBox(height: 24),
-
-                                  // Stats Cards
-                                  _buildStatsCards(),
-                                  const SizedBox(height: 32),
-
-                                  // Menu Title
-                                  const Text(
-                                    'Menu Utama',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1A1A1A),
+                              position: _slideAnimation ??
+                                  const AlwaysStoppedAnimation(Offset.zero),
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 900),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildWelcomeText(),
+                                        const SizedBox(height: 24),
+                                        _buildStatsCards(),
+                                        const SizedBox(height: 32),
+                                        const Text(
+                                          'Menu Utama',
+                                          style: TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF1A1A1A),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildMenuGrid(),
+                                        const SizedBox(height: 20),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
-
-                                  // Menu Grid
-                                  _buildMenuGrid(),
-
-                                  const SizedBox(height: 20),
-                                ],
-                              ),
-                            ),
-                          ),
+                                ),
+                              )),
                         ),
                       ),
                     ),
@@ -379,6 +378,51 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildStatsCards() {
+    final width = MediaQuery.of(context).size.width;
+    final isTablet = width > 600;
+
+    if (isTablet) {
+      return GridView.count(
+        crossAxisCount: 4,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.6,
+        children: [
+          _buildStatCard(
+            icon: Icons.account_balance_wallet_rounded,
+            title: 'Uang di Outlet',
+            value: _formatRupiah(_uangDiOutlet),
+            subtitle: 'Hari ini',
+            color: Colors.green,
+          ),
+          _buildStatCard(
+            icon: Icons.receipt_long_rounded,
+            title: 'Pengeluaran',
+            value: _formatRupiah(_pengeluaran),
+            subtitle: 'Hari ini',
+            color: Colors.orange,
+          ),
+          _buildStatCard(
+            icon: Icons.credit_card_rounded,
+            title: 'Transfer',
+            value: _formatRupiah(_transfer),
+            subtitle: 'Hari ini',
+            color: Colors.blue,
+          ),
+          _buildStatCard(
+            icon: Icons.payments_rounded,
+            title: 'Cash',
+            value: _formatRupiah(_cash),
+            subtitle: 'Hari ini',
+            color: Colors.purple,
+          ),
+        ],
+      );
+    }
+
+    // layout lama (2 kolom) untuk mobile
     return Column(
       children: [
         Row(
@@ -499,90 +543,132 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildMenuGrid() {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
+    final width = MediaQuery.of(context).size.width;
+    // Breakpoint sederhana: <=600 mobile, >600 tablet/desktop [web:5][web:9]
+    int crossAxisCount = 2;
+    double childAspectRatio = 1.0;
+
+    if (width > 600 && width <= 1024) {
+      crossAxisCount = 3; // tablet
+      childAspectRatio = 1.1;
+    } else if (width > 1024) {
+      crossAxisCount = 4; // desktop / tablet besar
+      childAspectRatio = 1.1;
+    }
+
+    final items = [
+      {
+        'icon': Icons.point_of_sale_rounded,
+        'title': 'Kasir',
+        'subtitle': 'Buat Transaksi Baru',
+        'gradient': LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.red.shade700, Colors.red.shade900],
+        ),
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PesananScreen()),
+          );
+        },
+      },
+      {
+        'icon': Icons.print_rounded,
+        'title': 'Printer',
+        'subtitle': 'Kelola Printer',
+        'gradient': LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.orange.shade600, Colors.orange.shade800],
+        ),
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PrinterSetupScreen()),
+          );
+        },
+      },
+      {
+        'icon': Icons.money_off_csred_rounded,
+        'title': 'Pengeluaran',
+        'subtitle': 'Catat Pengeluaran',
+        'gradient': LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.indigo.shade600, Colors.indigo.shade800],
+        ),
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PengeluaranScreen()),
+          );
+        },
+      },
+      {
+        'icon': Icons.history_rounded,
+        'title': 'Riwayat',
+        'subtitle': 'Lihat Transaksi',
+        'gradient': LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.purple.shade600, Colors.purple.shade800],
+        ),
+        'onTap': () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Fitur dalam pengembangan'),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.settings_rounded,
+        'title': 'Pengaturan',
+        'subtitle': 'Atur Aplikasi',
+        'gradient': LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.teal.shade600, Colors.teal.shade800],
+        ),
+        'onTap': () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Fitur dalam pengembangan'),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        },
+      },
+    ];
+
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.0,
-      children: [
-        _buildModernMenuCard(
-          icon: Icons.point_of_sale_rounded,
-          title: 'Kasir',
-          subtitle: 'Buat Transaksi Baru',
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.red.shade700, Colors.red.shade900],
-          ),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PesananScreen()),
-            );
-          },
-        ),
-        _buildModernMenuCard(
-          icon: Icons.print_rounded,
-          title: 'Printer',
-          subtitle: 'Kelola Printer',
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.orange.shade600, Colors.orange.shade800],
-          ),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => const PrinterSetupScreen()),
-            );
-          },
-        ),
-        _buildModernMenuCard(
-          icon: Icons.history_rounded,
-          title: 'Riwayat',
-          subtitle: 'Lihat Transaksi',
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.purple.shade600, Colors.purple.shade800],
-          ),
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Fitur dalam pengembangan'),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-          },
-        ),
-        _buildModernMenuCard(
-          icon: Icons.settings_rounded,
-          title: 'Pengaturan',
-          subtitle: 'Atur Aplikasi',
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.teal.shade600, Colors.teal.shade800],
-          ),
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Fitur dalam pengembangan'),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-          },
-        ),
-      ],
+      itemCount: items.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: childAspectRatio,
+      ),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _buildModernMenuCard(
+          icon: item['icon'] as IconData,
+          title: item['title'] as String,
+          subtitle: item['subtitle'] as String,
+          gradient: item['gradient'] as Gradient,
+          onTap: item['onTap'] as VoidCallback,
+        );
+      },
     );
   }
 

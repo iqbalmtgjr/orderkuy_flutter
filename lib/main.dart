@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inisialisasi locale Indonesia
+  await initializeDateFormatting('id_ID', null);
   runApp(const OrderKuyApp());
 }
 
