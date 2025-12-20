@@ -665,6 +665,139 @@ class ApiService {
     }
   }
 
+  // riwayat
+  static Future<Map<String, dynamic>> getRiwayat({
+    int page = 1,
+    String? tanggalDari,
+    String? tanggalSampai,
+    int? jenisOrder,
+    int? metodePembayaran,
+    String? search,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        throw Exception('Token tidak ditemukan');
+      }
+
+      // Build query parameters
+      Map<String, String> queryParams = {
+        'page': page.toString(),
+      };
+
+      if (tanggalDari != null) queryParams['tanggal_dari'] = tanggalDari;
+      if (tanggalSampai != null) queryParams['tanggal_sampai'] = tanggalSampai;
+      if (jenisOrder != null)
+        queryParams['jenis_order'] = jenisOrder.toString();
+      if (metodePembayaran != null) {
+        queryParams['metode_pembayaran'] = metodePembayaran.toString();
+      }
+      if (search != null && search.isNotEmpty) queryParams['search'] = search;
+
+      final uri =
+          Uri.parse('$baseUrl/riwayat').replace(queryParameters: queryParams);
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('Sesi berakhir, silakan login ulang');
+      } else {
+        throw Exception('Gagal memuat riwayat');
+      }
+    } catch (e) {
+      debugPrint('Error getRiwayat: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> getRiwayatSummary({
+    String? tanggalDari,
+    String? tanggalSampai,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        throw Exception('Token tidak ditemukan');
+      }
+
+      Map<String, String> queryParams = {};
+      if (tanggalDari != null) queryParams['tanggal_dari'] = tanggalDari;
+      if (tanggalSampai != null) queryParams['tanggal_sampai'] = tanggalSampai;
+
+      final uri = Uri.parse('$baseUrl/riwayat/summary/stats')
+          .replace(queryParameters: queryParams);
+
+      debugPrint('🔍 Calling summary API: $uri'); // Debug log
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      debugPrint(
+          '📊 Summary response status: ${response.statusCode}'); // Debug log
+      debugPrint('📊 Summary response body: ${response.body}'); // Debug log
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('Sesi berakhir, silakan login ulang');
+      } else if (response.statusCode == 404) {
+        throw Exception(
+            'Endpoint summary tidak ditemukan. Periksa routing Laravel.');
+      } else {
+        throw Exception(
+            'Gagal memuat summary: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error getRiwayatSummary: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> getRiwayatDetail(int orderId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        throw Exception('Token tidak ditemukan');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/riwayat/$orderId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Gagal memuat detail transaksi');
+      }
+    } catch (e) {
+      debugPrint('Error getRiwayatDetail: $e');
+      rethrow;
+    }
+  }
+
   // Logout
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();

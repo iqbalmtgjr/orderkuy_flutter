@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../services/api_service.dart';
 import 'login_screen.dart';
 import 'pesanan_screen.dart';
+import 'riwayat_screen.dart';
 import 'printer_setup_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -615,14 +616,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           colors: [Colors.purple.shade600, Colors.purple.shade800],
         ),
         'onTap': () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Fitur dalam pengembangan'),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const RiwayatScreen()),
           );
         },
       },

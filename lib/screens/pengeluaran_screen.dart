@@ -596,21 +596,17 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                 return RefreshIndicator(
                   onRefresh: _loadPengeluaran,
                   color: Colors.red.shade400,
-                  child: GridView.builder(
+                  child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount:
-                          MediaQuery.of(context).size.width > 600 ? 3 : 2,
-                      childAspectRatio: 0.85,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
                     itemCount: _pengeluaranList.length,
                     itemBuilder: (context, index) {
                       final pengeluaran = _pengeluaranList[index];
                       debugPrint(
                           '🎨 Building card $index: ${pengeluaran.namaPengeluaran}');
-                      return _buildPengeluaranCard(pengeluaran);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildPengeluaranCard(pengeluaran),
+                      );
                     },
                   ),
                 );
@@ -693,153 +689,141 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
   Widget _buildPengeluaranCard(Pengeluaran pengeluaran) {
     final date = DateTime.tryParse(pengeluaran.tanggal);
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: InkWell(
         onTap: () => _showPengeluaranForm(pengeluaran: pengeluaran),
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
             children: [
-              // Header dengan Menu
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      date != null ? DateFormat('dd/MM').format(date) : '-',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red.shade700,
-                      ),
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    padding: EdgeInsets.zero,
-                    icon: Icon(Icons.more_vert,
-                        size: 18, color: Colors.grey.shade600),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _showPengeluaranForm(pengeluaran: pengeluaran);
-                      } else if (value == 'delete') {
-                        if (pengeluaran.id != null) {
-                          _deletePengeluaran(pengeluaran.id!);
-                        }
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 18),
-                            SizedBox(width: 8),
-                            Text('Edit'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 18, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Hapus', style: TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Icon & Nama Pengeluaran
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.shopping_bag_outlined,
-                      size: 20,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      pengeluaran.namaPengeluaran,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-
-              const Spacer(),
-
-              // Deskripsi (jika ada)
-              if (pengeluaran.deskripsi != null &&
-                  pengeluaran.deskripsi!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  pengeluaran.deskripsi!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                    height: 1.3,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-
-              const SizedBox(height: 12),
-
-              // Divider
+              // Icon
               Container(
-                height: 1,
-                color: Colors.grey.shade200,
-              ),
-
-              const SizedBox(height: 12),
-
-              // Jumlah
-              Text(
-                _currencyFormat.format(pengeluaran.jumlah),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  Icons.shopping_bag_outlined,
+                  size: 16,
                   color: Colors.red.shade600,
                 ),
+              ),
+              const SizedBox(width: 12),
+
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Name and Date
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            pengeluaran.namaPengeluaran,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          date != null ? DateFormat('dd/MM').format(date) : '-',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Description (if exists)
+                    if (pengeluaran.deskripsi != null &&
+                        pengeluaran.deskripsi!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        pengeluaran.deskripsi!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+
+                    // Amount
+                    const SizedBox(height: 4),
+                    Text(
+                      _currencyFormat.format(pengeluaran.jumlah),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Menu
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                icon: Icon(Icons.more_vert,
+                    size: 16, color: Colors.grey.shade600),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _showPengeluaranForm(pengeluaran: pengeluaran);
+                  } else if (value == 'delete') {
+                    if (pengeluaran.id != null) {
+                      _deletePengeluaran(pengeluaran.id!);
+                    }
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit, size: 16),
+                        SizedBox(width: 8),
+                        Text('Edit'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete, size: 16, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Hapus', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

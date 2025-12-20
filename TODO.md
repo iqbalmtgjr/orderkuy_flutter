@@ -1,0 +1,1 @@
+- [x] Make login form card responsive: 500px width for tablets (>600px), full width for mobile
