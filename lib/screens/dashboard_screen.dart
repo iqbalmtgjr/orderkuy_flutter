@@ -7,6 +7,7 @@ import 'login_screen.dart';
 import 'pesanan_screen.dart';
 import 'riwayat_screen.dart';
 import 'printer_setup_screen.dart';
+import 'absensi_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -619,6 +620,22 @@ class _DashboardScreenState extends State<DashboardScreen>
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const RiwayatScreen()),
+          );
+        },
+      },
+      {
+        'icon': Icons.fingerprint_rounded,
+        'title': 'Absensi',
+        'subtitle': 'Check-in & Check-out',
+        'gradient': LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.green.shade600, Colors.green.shade800],
+        ),
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AbsensiScreen()),
           );
         },
       },

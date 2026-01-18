@@ -76,15 +76,6 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
 
     if (!mounted) return;
 
-    if (result is! Map<String, dynamic>) {
-      debugPrint('❌ Result bukan Map');
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Respon server tidak valid')),
-      );
-      return;
-    }
-
     if (result['success'] == true) {
       final rawData = result['data'];
       debugPrint('🔍 Raw Data Type: ${rawData.runtimeType}');

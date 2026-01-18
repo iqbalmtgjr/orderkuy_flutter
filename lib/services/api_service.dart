@@ -689,8 +689,9 @@ class ApiService {
 
       if (tanggalDari != null) queryParams['tanggal_dari'] = tanggalDari;
       if (tanggalSampai != null) queryParams['tanggal_sampai'] = tanggalSampai;
-      if (jenisOrder != null)
+      if (jenisOrder != null) {
         queryParams['jenis_order'] = jenisOrder.toString();
+      }
       if (metodePembayaran != null) {
         queryParams['metode_pembayaran'] = metodePembayaran.toString();
       }

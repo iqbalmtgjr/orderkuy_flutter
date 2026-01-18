@@ -25,6 +25,7 @@ dependencies:
   flutter_thermal_printer: ^1.2.4
   image: ^4.5.4
   intl: ^0.20.2
+  geolocator: ^10.1.0
 
 dev_dependencies:
   flutter_test:
