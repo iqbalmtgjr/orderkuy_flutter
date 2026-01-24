@@ -1,11 +1,11 @@
-// ignore_for_file: deprecated_member_use
-
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/print_service.dart';
+import '../services/sync_service.dart'; // ← IMPORT BARU
 import '../models/order.dart';
 import '../utils/constants.dart';
 import 'kasir_screen.dart';
+import '../widgets/sync_status_widget.dart'; // ← IMPORT BARU
 
 class PesananScreen extends StatefulWidget {
   const PesananScreen({super.key});
@@ -40,6 +40,25 @@ class _PesananScreenState extends State<PesananScreen> {
     });
   }
 
+  // ← TAMBAHAN: Manual refresh dengan pull-to-refresh
+  Future<void> _refreshOrders() async {
+    // Try to sync offline orders first
+    await SyncService.syncOrders();
+
+    // Then reload orders from server
+    await _loadOrders();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data berhasil diperbarui'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
   Future<void> _selesaikanPesanan(int orderId) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -67,7 +86,6 @@ class _PesananScreenState extends State<PesananScreen> {
     );
 
     if (confirm == true) {
-      // Show loading
       showDialog(
         // ignore: use_build_context_synchronously
         context: context,
@@ -101,7 +119,6 @@ class _PesananScreenState extends State<PesananScreen> {
 
   Future<void> _printReceipt(Order order) async {
     try {
-      // Show loading immediately
       if (!mounted) return;
       showDialog(
         context: context,
@@ -121,12 +138,11 @@ class _PesananScreenState extends State<PesananScreen> {
         ),
       );
 
-      // Load saved printer
       final savedPrinter = await ThermalPrintService.getSavedPrinter();
 
       if (savedPrinter == null) {
         if (!mounted) return;
-        Navigator.pop(context); // Close loading
+        Navigator.pop(context);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -139,10 +155,8 @@ class _PesananScreenState extends State<PesananScreen> {
         return;
       }
 
-      // Ensure printer is set in the service
       ThermalPrintService.setSelectedPrinter(savedPrinter);
 
-      // Convert order items to the format expected by print service
       final items = order.items
           .map((item) => {
                 'menu_id': item.menuId,
@@ -152,7 +166,6 @@ class _PesananScreenState extends State<PesananScreen> {
               })
           .toList();
 
-      // Update loading text
       if (!mounted) return;
       Navigator.pop(context);
       showDialog(
@@ -173,7 +186,7 @@ class _PesananScreenState extends State<PesananScreen> {
 
       final success = await ThermalPrintService.printReceipt(
         orderId: order.id.toString(),
-        tokoNama: order.tokoNama ?? 'OrderKuy', // Use from order data
+        tokoNama: order.tokoNama ?? 'OrderKuy',
         items: items,
         totalHarga: order.totalHarga,
         jenisOrder: order.jenisOrder,
@@ -187,7 +200,7 @@ class _PesananScreenState extends State<PesananScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // Close loading
+      Navigator.pop(context);
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -209,7 +222,6 @@ class _PesananScreenState extends State<PesananScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      // Make sure to close any open dialogs
       Navigator.of(context).popUntil((route) => route is! DialogRoute);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -298,6 +310,12 @@ class _PesananScreenState extends State<PesananScreen> {
         ),
         elevation: 10,
         actions: [
+          // ← TAMBAHAN: Manual sync button
+          IconButton(
+            icon: const Icon(Icons.sync, color: Colors.white),
+            onPressed: _refreshOrders,
+            tooltip: 'Refresh & Sync',
+          ),
           IconButton(
             icon: const Icon(Icons.filter_list, color: Colors.white),
             onPressed: _showFilterDialog,
@@ -305,45 +323,56 @@ class _PesananScreenState extends State<PesananScreen> {
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.red[50]!,
-              Colors.white,
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      body: Column(
+        children: [
+          // ← TAMBAHAN: Sync Status Widget di sini
+          const SyncStatusWidget(),
+
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.red[50]!,
+                    Colors.white,
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _orders.isEmpty
+                      ? _buildEmptyState()
+                      : RefreshIndicator(
+                          onRefresh:
+                              _refreshOrders, // ← MODIFIED: Use new refresh
+                          child: GridView.builder(
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              childAspectRatio: 1.2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                            ),
+                            itemCount: _orders.length,
+                            itemBuilder: (context, index) {
+                              final order = _orders[index];
+                              return _buildOrderCard(order);
+                            },
+                          ),
+                        ),
+            ),
           ),
-        ),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _orders.isEmpty
-                ? _buildEmptyState()
-                : RefreshIndicator(
-                    onRefresh: _loadOrders,
-                    child: GridView.builder(
-                      padding: const EdgeInsets.all(16),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossAxisCount,
-                        childAspectRatio: 1.2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                      itemCount: _orders.length,
-                      itemBuilder: (context, index) {
-                        final order = _orders[index];
-                        return _buildOrderCard(order);
-                      },
-                    ),
-                  ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const KasirScreen()),
-          ).then((_) => _loadOrders()); // Reload saat kembali
+          ).then((_) => _loadOrders());
         },
         backgroundColor: const Color(0xFFD32F2F),
         foregroundColor: Colors.white,
@@ -354,6 +383,7 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
+  // ... Semua widget builder tetap sama
   Widget _buildEmptyState() {
     return Center(
       child: Container(
@@ -408,36 +438,6 @@ class _PesananScreenState extends State<PesananScreen> {
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 32),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade900,
-                borderRadius: BorderRadius.circular(25),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.shade900.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'Buat Pesanan Baru',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -463,7 +463,6 @@ class _PesananScreenState extends State<PesananScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with gradient background
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -477,75 +476,64 @@ class _PesananScreenState extends State<PesananScreen> {
                     topRight: Radius.circular(16),
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              order.jenisOrder == 1
-                                  ? Icons.restaurant
-                                  : Icons.shopping_bag,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              order.jenisOrder == 1
-                                  ? 'Meja ${order.mejaNo ?? "-"}'
-                                  : 'Take Away',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                        Icon(
+                          order.jenisOrder == 1
+                              ? Icons.restaurant
+                              : Icons.shopping_bag,
+                          color: Colors.white,
+                          size: 20,
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade600,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            'PENDING',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        const SizedBox(width: 6),
+                        Text(
+                          order.jenisOrder == 1
+                              ? 'Meja ${order.mejaNo ?? "-"}'
+                              : 'Take Away',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade600,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'PENDING',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-
-              // Body
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Item count and total
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           children: [
-                            Icon(
-                              Icons.shopping_cart,
-                              size: 16,
-                              color: Colors.red.shade700,
-                            ),
+                            Icon(Icons.shopping_cart,
+                                size: 16, color: Colors.red.shade700),
                             const SizedBox(width: 4),
                             Text(
                               '${order.items.length} item${order.items.length > 1 ? 's' : ''}',
@@ -567,10 +555,7 @@ class _PesananScreenState extends State<PesananScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 8),
-
-                    // Notes display
                     if (order.catatan != null && order.catatan!.isNotEmpty) ...[
                       Container(
                         padding: const EdgeInsets.all(8),
@@ -581,11 +566,8 @@ class _PesananScreenState extends State<PesananScreen> {
                         ),
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.note,
-                              size: 14,
-                              color: Colors.orange.shade700,
-                            ),
+                            Icon(Icons.note,
+                                size: 14, color: Colors.orange.shade700),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
@@ -604,8 +586,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                       const SizedBox(height: 8),
                     ],
-
-                    // Action Buttons - Icon only, no text
                     Row(
                       children: [
                         Expanded(

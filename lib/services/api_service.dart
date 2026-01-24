@@ -2,11 +2,15 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:uuid/uuid.dart';
 import '../utils/constants.dart';
 import '../models/product.dart';
 import '../models/meja.dart';
 import '../models/order.dart';
 import '../models/pengeluaran.dart';
+import '../core/database/db_helper.dart';
+import '../core/database/offline_queue_db.dart';
 
 class ApiService {
   static String get baseUrl => Constants.baseUrl;
@@ -84,6 +88,23 @@ class ApiService {
 
   // Get Menu/Products
   static Future<List<Product>> getMenus() async {
+    final conn = await Connectivity().checkConnectivity();
+
+    // If offline, load from cache
+    if (conn == ConnectivityResult.none) {
+      debugPrint('Offline: Loading menus from cache');
+      final hasCache = await DBHelper.hasProductsCache();
+      if (hasCache) {
+        final cachedProducts = await DBHelper.getProductsFromCache();
+        // Perbaikan: Cast ke List<Map<String, dynamic>>
+        return cachedProducts.map((p) => Product.fromJson(p)).toList();
+      } else {
+        debugPrint('No cached menus available');
+        return [];
+      }
+    }
+
+    // Online: fetch from API and cache
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
@@ -99,12 +120,35 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final menusList = data['menus'] as List;
-        return menusList.map((menu) => Product.fromJson(menu)).toList();
+
+        // Perbaikan: Cast setiap item ke Map<String, dynamic>
+        final menusListCasted =
+            menusList.map((menu) => menu as Map<String, dynamic>).toList();
+
+        // Cache the products
+        await DBHelper.saveProductsToCache(menusListCasted);
+
+        return menusListCasted.map((menu) => Product.fromJson(menu)).toList();
       } else {
+        // If API fails, try to load from cache
+        debugPrint('API failed, loading from cache');
+        final hasCache = await DBHelper.hasProductsCache();
+        if (hasCache) {
+          final cachedProducts = await DBHelper.getProductsFromCache();
+          // Perbaikan: Cast ke List<Map<String, dynamic>>
+          return cachedProducts.map((p) => Product.fromJson(p)).toList();
+        }
         return [];
       }
     } catch (e) {
       debugPrint('Error getting menus: $e');
+      // On error, try to load from cache
+      final hasCache = await DBHelper.hasProductsCache();
+      if (hasCache) {
+        final cachedProducts = await DBHelper.getProductsFromCache();
+        // Perbaikan: Cast ke List<Map<String, dynamic>>
+        return cachedProducts.map((p) => Product.fromJson(p)).toList();
+      }
       return [];
     }
   }
@@ -214,13 +258,43 @@ class ApiService {
   }
 
   // Create Order (Buat Pesanan Baru)
-  // Response format: { "success": true, "message": "...", "data": {...} }
   static Future<Map<String, dynamic>> createOrder(
     Map<String, dynamic> orderData,
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
+      final conn = await Connectivity().checkConnectivity();
+
+      // Generate UUID if not exists
+      if (!orderData.containsKey('client_uuid') ||
+          orderData['client_uuid'] == null) {
+        orderData['client_uuid'] = const Uuid().v4();
+      }
+
+      final clientUuid = orderData['client_uuid'] as String;
+
+      // If offline, save to local database
+      if (conn == ConnectivityResult.none) {
+        debugPrint('📵 Offline: Saving order locally with UUID: $clientUuid');
+
+        await DBHelper.saveOfflineOrder(orderData, clientUuid);
+
+        return {
+          'success': true,
+          'message': 'Pesanan disimpan offline (akan diupload saat online)',
+          'offline': true,
+          'data': {
+            'id': 'OFFLINE-${DateTime.now().millisecondsSinceEpoch}',
+            'client_uuid': clientUuid,
+            'user': {'name': 'OFFLINE'},
+            'toko': {'nama_toko': 'OFFLINE'},
+          },
+        };
+      }
+
+      // Online: Send to server
+      debugPrint('📡 Online: Sending order to server with UUID: $clientUuid');
 
       final response = await http.post(
         Uri.parse('$baseUrl/orders'),
@@ -239,45 +313,61 @@ class ApiService {
         debugPrint('Response Body: ${response.body.substring(0, 500)}...');
         debugPrint('============================');
 
+        // Save offline as fallback
+        await DBHelper.saveOfflineOrder(orderData, clientUuid);
+
         return {
           'success': false,
-          'message':
-              'Server error: ${response.statusCode}. Silakan coba lagi atau hubungi administrator.',
+          'message': 'Server error. Pesanan disimpan offline.',
+          'offline': true,
         };
       }
 
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Debug: print response data
-        debugPrint('=== CREATE ORDER RESPONSE ===');
-        debugPrint('Success: ${responseData['success']}');
-        if (responseData['data'] != null) {
-          debugPrint('Order ID: ${responseData['data']['id']}');
-          debugPrint('Kasir: ${responseData['data']['user']?['name']}');
-          debugPrint('Toko: ${responseData['data']['toko']?['nama_toko']}');
-          debugPrint('Alamat: ${responseData['data']['toko']?['alamat']}');
-        }
-        debugPrint('============================');
-        debugPrint(jsonDecode(response.body).toString());
+        debugPrint('✅ Order created successfully on server');
+        debugPrint('Server ID: ${responseData['data']?['id']}');
 
         return {
           'success': true,
           'message': responseData['message'] ?? 'Order berhasil dibuat',
-          'data': responseData['data'], // Include user dan toko dari backend
+          'offline': false,
+          'data': responseData['data'],
         };
       } else {
+        // Save offline as fallback
+        debugPrint('❌ Server rejected order, saving offline');
+        await DBHelper.saveOfflineOrder(orderData, clientUuid);
+
         return {
           'success': false,
-          'message': responseData['message'] ?? 'Gagal membuat order',
+          'message': '${responseData['message']}. Pesanan disimpan offline.',
+          'offline': true,
         };
       }
     } catch (e) {
-      debugPrint('Error creating order: $e');
-      return {
-        'success': false,
-        'message': 'Error: ${e.toString()}',
-      };
+      debugPrint('❌ Error creating order: $e');
+
+      // Save offline as fallback
+      final clientUuid = orderData['client_uuid'] ?? const Uuid().v4();
+      orderData['client_uuid'] = clientUuid;
+
+      try {
+        await DBHelper.saveOfflineOrder(orderData, clientUuid);
+        return {
+          'success': false,
+          'message': 'Error koneksi. Pesanan disimpan offline.',
+          'offline': true,
+          'error': e.toString(),
+        };
+      } catch (dbError) {
+        return {
+          'success': false,
+          'message': 'Gagal menyimpan pesanan: ${dbError.toString()}',
+          'error': e.toString(),
+        };
+      }
     }
   }
 
@@ -286,6 +376,16 @@ class ApiService {
     int orderId,
     Map<String, dynamic> orderData,
   ) async {
+    final conn = await Connectivity().checkConnectivity();
+
+    if (conn == ConnectivityResult.none) {
+      await OfflineQueueDB.push(
+        endpoint: '/orders/$orderId',
+        method: 'PUT',
+        payload: orderData,
+      );
+      return {'success': true, 'message': 'Update disimpan offline'};
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
@@ -428,6 +528,40 @@ class ApiService {
     String? tanggalAkhir,
     String? namaPengeluaranFilter,
   }) async {
+    final conn = await Connectivity().checkConnectivity();
+
+    // ← OFFLINE: Load from cache
+    if (conn == ConnectivityResult.none) {
+      debugPrint('📵 Offline: Loading pengeluaran from cache');
+
+      final hasCache = await DBHelper.hasPengeluaranCache();
+      if (hasCache) {
+        final cachedData = await DBHelper.getPengeluaranFromCache();
+
+        // Convert to Pengeluaran objects
+        final pengeluaranList =
+            cachedData.map((item) => Pengeluaran.fromJson(item)).toList();
+
+        // Calculate total
+        double total =
+            pengeluaranList.fold(0, (sum, item) => sum + item.jumlah);
+
+        return {
+          'success': true,
+          'data': pengeluaranList,
+          'total_pengeluaran': total,
+          'offline': true,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Tidak ada data cache. Hubungkan internet untuk sync.',
+          'offline': true,
+        };
+      }
+    }
+
+    // ← ONLINE: Fetch from API
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
@@ -467,12 +601,14 @@ class ApiService {
         final pengeluaran =
             pengeluaranList.map((item) => Pengeluaran.fromJson(item)).toList();
 
-        // Fungsi helper untuk parsing total pengeluaran yang aman
+        // ← CACHE the data
+        await DBHelper.savePengeluaranToCache(
+            pengeluaranList.cast<Map<String, dynamic>>());
+
         double parseTotalPengeluaran(dynamic value) {
           if (value == null) return 0.0;
           if (value is num) return value.toDouble();
           if (value is String) {
-            // Hapus format currency jika ada (Rp, titik, koma)
             final cleanValue = value
                 .replaceAll('Rp', '')
                 .replaceAll('.', '')
@@ -483,16 +619,32 @@ class ApiService {
           return 0.0;
         }
 
-        // Debug: Print response untuk troubleshooting
-        debugPrint('API Response: ${data.toString()}');
-        debugPrint('Total Pengeluaran Key: ${data['total_pengeluaran']}');
-
         return {
           'success': true,
           'data': pengeluaran,
           'total_pengeluaran': parseTotalPengeluaran(data['total_pengeluaran']),
+          'offline': false,
         };
       } else {
+        // API error - fallback to cache
+        final hasCache = await DBHelper.hasPengeluaranCache();
+        if (hasCache) {
+          final cachedData = await DBHelper.getPengeluaranFromCache();
+          final pengeluaranList =
+              cachedData.map((item) => Pengeluaran.fromJson(item)).toList();
+
+          double total =
+              pengeluaranList.fold(0, (sum, item) => sum + item.jumlah);
+
+          return {
+            'success': true,
+            'data': pengeluaranList,
+            'total_pengeluaran': total,
+            'offline': true,
+            'message': 'Menggunakan data cache (API error)',
+          };
+        }
+
         final data = jsonDecode(response.body);
         return {
           'success': false,
@@ -501,6 +653,26 @@ class ApiService {
       }
     } catch (e) {
       debugPrint('Error getting pengeluaran: $e');
+
+      // Fallback to cache on error
+      final hasCache = await DBHelper.hasPengeluaranCache();
+      if (hasCache) {
+        final cachedData = await DBHelper.getPengeluaranFromCache();
+        final pengeluaranList =
+            cachedData.map((item) => Pengeluaran.fromJson(item)).toList();
+
+        double total =
+            pengeluaranList.fold(0, (sum, item) => sum + item.jumlah);
+
+        return {
+          'success': true,
+          'data': pengeluaranList,
+          'total_pengeluaran': total,
+          'offline': true,
+          'message': 'Menggunakan data cache (Error: $e)',
+        };
+      }
+
       return {
         'success': false,
         'message': 'Error: ${e.toString()}',
@@ -508,13 +680,46 @@ class ApiService {
     }
   }
 
-  // Create Pengeluaran
   static Future<Map<String, dynamic>> createPengeluaran(
     Map<String, dynamic> pengeluaranData,
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
+      final conn = await Connectivity().checkConnectivity();
+
+      // Generate UUID
+      if (!pengeluaranData.containsKey('client_uuid') ||
+          pengeluaranData['client_uuid'] == null) {
+        pengeluaranData['client_uuid'] = const Uuid().v4();
+      }
+
+      final clientUuid = pengeluaranData['client_uuid'] as String;
+
+      // ← OFFLINE: Save locally
+      if (conn == ConnectivityResult.none) {
+        debugPrint(
+            '📵 Offline: Saving pengeluaran locally with UUID: $clientUuid');
+
+        await DBHelper.saveOfflinePengeluaran(pengeluaranData, clientUuid);
+
+        // Also add to cache for immediate display
+        await DBHelper.addPengeluaranToCache(pengeluaranData);
+
+        return {
+          'success': true,
+          'message': 'Pengeluaran disimpan offline (akan diupload saat online)',
+          'offline': true,
+          'data': {
+            'id': 'OFFLINE-${DateTime.now().millisecondsSinceEpoch}',
+            'client_uuid': clientUuid,
+          },
+        };
+      }
+
+      // ← ONLINE: Send to server
+      debugPrint(
+          '📡 Online: Sending pengeluaran to server with UUID: $clientUuid');
 
       final response = await http.post(
         Uri.parse('$baseUrl/pengeluaran'),
@@ -528,24 +733,51 @@ class ApiService {
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('✅ Pengeluaran created successfully on server');
+
         return {
           'success': true,
           'message':
               responseData['message'] ?? 'Pengeluaran berhasil ditambahkan',
+          'offline': false,
           'data': responseData['data'],
         };
       } else {
+        // Server error - save offline
+        debugPrint('❌ Server rejected, saving offline');
+        await DBHelper.saveOfflinePengeluaran(pengeluaranData, clientUuid);
+        await DBHelper.addPengeluaranToCache(pengeluaranData);
+
         return {
           'success': false,
-          'message': responseData['message'] ?? 'Gagal menambahkan pengeluaran',
+          'message': '${responseData['message']}. Disimpan offline.',
+          'offline': true,
         };
       }
     } catch (e) {
-      debugPrint('Error creating pengeluaran: $e');
-      return {
-        'success': false,
-        'message': 'Error: ${e.toString()}',
-      };
+      debugPrint('❌ Error creating pengeluaran: $e');
+
+      // Save offline as fallback
+      final clientUuid = pengeluaranData['client_uuid'] ?? const Uuid().v4();
+      pengeluaranData['client_uuid'] = clientUuid;
+
+      try {
+        await DBHelper.saveOfflinePengeluaran(pengeluaranData, clientUuid);
+        await DBHelper.addPengeluaranToCache(pengeluaranData);
+
+        return {
+          'success': false,
+          'message': 'Error koneksi. Pengeluaran disimpan offline.',
+          'offline': true,
+          'error': e.toString(),
+        };
+      } catch (dbError) {
+        return {
+          'success': false,
+          'message': 'Gagal menyimpan: ${dbError.toString()}',
+          'error': e.toString(),
+        };
+      }
     }
   }
 
@@ -591,6 +823,23 @@ class ApiService {
     int pengeluaranId,
     Map<String, dynamic> pengeluaranData,
   ) async {
+    final conn = await Connectivity().checkConnectivity();
+
+    if (conn == ConnectivityResult.none) {
+      // For offline update, queue it
+      await OfflineQueueDB.push(
+        endpoint: '/pengeluaran/$pengeluaranId',
+        method: 'PUT',
+        payload: pengeluaranData,
+      );
+
+      return {
+        'success': true,
+        'message': 'Update disimpan offline',
+        'offline': true,
+      };
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
@@ -805,4 +1054,35 @@ class ApiService {
     await prefs.remove(Constants.tokenKey);
     await prefs.remove(Constants.userKey);
   }
+
+  static Future<Map<String, dynamic>> raw({
+    required String endpoint,
+    required String method,
+    required Map<String, dynamic> payload,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(Constants.tokenKey);
+
+    final url = Uri.parse('$baseUrl$endpoint');
+
+    http.Response res;
+
+    if (method == 'PUT') {
+      res = await http.put(url,
+          headers: _headers(token), body: jsonEncode(payload));
+    } else if (method == 'DELETE') {
+      res = await http.delete(url, headers: _headers(token));
+    } else {
+      res = await http.post(url,
+          headers: _headers(token), body: jsonEncode(payload));
+    }
+
+    return jsonDecode(res.body);
+  }
+
+  static Map<String, String> _headers(String? token) => {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
 }

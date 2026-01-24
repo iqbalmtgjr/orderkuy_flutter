@@ -1,14 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'dart:io' show Platform;
+
+// Import sqflite
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
-import 'package:intl/date_symbol_data_local.dart';
+import 'services/sync_service.dart';
+import 'core/database/db_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inisialisasi locale Indonesia
+  // ========================================
+  // PENTING: Initialize sqflite untuk Windows/Linux
+  // ========================================
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    debugPrint('✅ Using sqflite_common_ffi for ${Platform.operatingSystem}');
+  }
+
+  // Initialize locale Indonesia
   await initializeDateFormatting('id_ID', null);
+
+  // Initialize database
+  try {
+    await DBHelper.db;
+    debugPrint('✅ Database initialized');
+  } catch (e) {
+    debugPrint('❌ Database initialization error: $e');
+  }
+
+  // Start auto-sync listener
+  try {
+    SyncService.startAutoSync();
+    debugPrint('✅ Auto-sync listener started');
+  } catch (e) {
+    debugPrint('⚠️ Auto-sync error: $e');
+  }
+
+  // Try to sync products on app start (if online)
+  try {
+    final result = await SyncService.syncProducts();
+    if (result['success']) {
+      debugPrint('✅ ${result['message']}');
+    } else {
+      debugPrint('⚠️ ${result['message']}');
+    }
+  } catch (e) {
+    debugPrint('⚠️ Error syncing products on startup: $e');
+  }
+
+  // Try to sync pending orders on app start (if online)
+  try {
+    final result = await SyncService.syncOrders();
+    if (result['success'] && result['synced'] > 0) {
+      debugPrint('✅ ${result['synced']} offline orders synced on startup');
+    }
+  } catch (e) {
+    debugPrint('⚠️ Error syncing orders on startup: $e');
+  }
+
   runApp(const OrderKuyApp());
 }
 
@@ -94,8 +149,6 @@ class _SplashScreenState extends State<SplashScreen> {
                   );
                 },
               ),
-              // child: Icon(Icons.restaurant_menu,
-              //     size: 80, color: Colors.red.shade900),
             ),
             const SizedBox(height: 30),
 
@@ -110,9 +163,9 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 10),
 
-            const Text(
-              'Aplikasi Kasir',
-              style: TextStyle(fontSize: 18, color: Colors.white70),
+            Text(
+              'Aplikasi Kasir - ${Platform.operatingSystem.toUpperCase()}',
+              style: const TextStyle(fontSize: 18, color: Colors.white70),
             ),
             const SizedBox(height: 50),
 

@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:orderkuy_kasir/screens/pengeluaran_form_screen.dart';
 import '../services/api_service.dart';
 import '../models/pengeluaran.dart';
+import '../core/database/db_helper.dart';
+import '../services/sync_service.dart';
 
 class PengeluaranScreen extends StatefulWidget {
   const PengeluaranScreen({super.key});
@@ -26,6 +28,8 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
   DateTime? _tanggalAwal;
   DateTime? _tanggalAkhir;
   double _totalPengeluaran = 0;
+  bool _isOfflineMode = false;
+  int _offlinePendingCount = 0;
 
   Timer? _searchDebounce;
 
@@ -71,6 +75,9 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
           : null,
     );
 
+    // ← CHECK OFFLINE STATUS
+    final offlineCount = await DBHelper.getOfflinePengeluaranCount();
+
     debugPrint('📦 Result: ${result.toString()}');
     debugPrint('✅ Success: ${result['success']}');
 
@@ -78,17 +85,12 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
 
     if (result['success'] == true) {
       final rawData = result['data'];
-      debugPrint('🔍 Raw Data Type: ${rawData.runtimeType}');
-      debugPrint('🔍 Raw Data is List: ${rawData is List}');
-      debugPrint('🔍 Raw Data length: ${rawData is List ? rawData.length : 0}');
 
       List<Pengeluaran> pengeluaranList = [];
 
       if (rawData is List<Pengeluaran>) {
         pengeluaranList = rawData;
-        debugPrint('✅ Data already parsed as List<Pengeluaran>');
       } else if (rawData is List) {
-        debugPrint('⚠️ Data is List but not List<Pengeluaran>, parsing now...');
         for (var item in rawData) {
           try {
             if (item is Pengeluaran) {
@@ -102,14 +104,9 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
         }
       }
 
-      debugPrint('✅ Parsed List Length: ${pengeluaranList.length}');
-
       setState(() {
         _pengeluaranList.clear();
         _pengeluaranList.addAll(pengeluaranList);
-
-        debugPrint(
-            '✅ _pengeluaranList Length after setState: ${_pengeluaranList.length}');
 
         final rawTotal = result['total_pengeluaran'];
         if (rawTotal == null) {
@@ -122,14 +119,19 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
           _totalPengeluaran = 0;
         }
 
-        debugPrint('💵 Total Pengeluaran: $_totalPengeluaran');
+        // ← SET OFFLINE STATUS
+        _isOfflineMode = result['offline'] ?? false;
+        _offlinePendingCount = offlineCount;
 
         _isLoading = false;
       });
     } else {
-      debugPrint('❌ API returned success: false');
-      debugPrint('❌ Message: ${result['message']}');
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _isOfflineMode = result['offline'] ?? false;
+        _offlinePendingCount = offlineCount;
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -138,6 +140,33 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _manualSync() async {
+    setState(() => _isLoading = true);
+
+    final result = await SyncService.syncPengeluaran();
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    if (result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Sync berhasil'),
+          backgroundColor: Colors.green.shade600,
+        ),
+      );
+      _loadPengeluaran();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Sync gagal'),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
     }
   }
 
@@ -258,8 +287,8 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    // final theme = Theme.of(context);
+    // final colorScheme = theme.colorScheme;
 
     debugPrint(
         '🎨 Building UI - isLoading: $_isLoading, listLength: ${_pengeluaranList.length}');
@@ -277,6 +306,68 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
+        // ← TAMBAHKAN ACTIONS
+        actions: [
+          // Offline indicator
+          if (_isOfflineMode)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade100,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off,
+                      size: 16, color: Colors.orange.shade700),
+                  const SizedBox(width: 6),
+                  Text(
+                    'OFFLINE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Pending sync indicator
+          if (_offlinePendingCount > 0)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: Stack(
+                  children: [
+                    const Icon(Icons.sync),
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$_offlinePendingCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                onPressed: _manualSync,
+                tooltip: 'Sync $_offlinePendingCount pengeluaran offline',
+              ),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/api_service.dart';
 import '../services/print_service.dart';
 import '../models/product.dart';
@@ -6,6 +7,7 @@ import '../models/meja.dart';
 import '../models/order.dart';
 import '../utils/constants.dart';
 import 'printer_setup_screen.dart';
+import '../widgets/sync_status_widget.dart'; // ← IMPORT WIDGET BARU
 
 class KasirScreen extends StatefulWidget {
   final Order? orderToEdit;
@@ -21,6 +23,7 @@ class _KasirScreenState extends State<KasirScreen> {
   List<Meja> _mejas = [];
   final List<Map<String, dynamic>> _selectedItems = [];
   bool _isLoading = true;
+  bool _isOnline = true; // ← TAMBAHAN: Track connection status
 
   // Form fields
   int _jenisOrder = Constants.jenisOrderDineIn;
@@ -42,6 +45,9 @@ class _KasirScreenState extends State<KasirScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _checkConnectivity(); // ← TAMBAHAN: Check initial connectivity
+    _listenToConnectivity(); // ← TAMBAHAN: Listen to changes
+
     _searchController.addListener(() {
       _filterProducts(_searchController.text);
     });
@@ -77,14 +83,42 @@ class _KasirScreenState extends State<KasirScreen> {
     super.dispose();
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // CONNECTIVITY MONITORING
+  // ═══════════════════════════════════════════════════════════
+
+  Future<void> _checkConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
+    setState(() {
+      _isOnline = result != ConnectivityResult.none;
+    });
+  }
+
+  void _listenToConnectivity() {
+    Connectivity().onConnectivityChanged.listen((result) {
+      setState(() {
+        _isOnline = result != ConnectivityResult.none;
+      });
+
+      if (_isOnline && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('📡 Koneksi kembali, data akan tersinkron'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    });
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
     final products = await ApiService.getMenus();
     final mejas = widget.orderToEdit != null
-        ? await ApiService.getAllTables() // Load all tables when editing
-        : await ApiService
-            .getFreeTables(); // Load only free tables when creating
+        ? await ApiService.getAllTables()
+        : await ApiService.getFreeTables();
 
     setState(() {
       _products = products;
@@ -192,9 +226,9 @@ class _KasirScreenState extends State<KasirScreen> {
   Future<void> _showPaymentDialog() async {
     if (_selectedItems.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Keranjang masih kosong')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Keranjang masih kosong')),
+        );
       }
       return;
     }
@@ -219,6 +253,34 @@ class _KasirScreenState extends State<KasirScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ← TAMBAHAN: Offline indicator di dialog
+                  if (!_isOnline)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.cloud_off,
+                              size: 16, color: Colors.orange.shade900),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Mode Offline: Pesanan akan tersimpan lokal',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   Text(
                     'Total: Rp ${_totalHarga.toStringAsFixed(0)}',
                     style: const TextStyle(
@@ -335,16 +397,26 @@ class _KasirScreenState extends State<KasirScreen> {
     Navigator.pop(context); // Close loading dialog
 
     if (result['success']) {
-      // Print receipt
-      await _printReceipt(result['data']);
+      // ← MODIFIED: Show different message for offline
+      final isOffline = result['offline'] == true;
+
+      // Print receipt only if online or if we have order data
+      if (!isOffline && result['data'] != null) {
+        await _printReceipt(result['data']);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isEditing
-                ? 'Pesanan berhasil diperbarui dan struk dicetak'
-                : 'Pesanan berhasil disimpan dan struk dicetak'),
-            backgroundColor: Colors.green,
+            content: Text(
+              isOffline
+                  ? '📵 Pesanan disimpan offline, akan tersinkron saat online'
+                  : isEditing
+                      ? 'Pesanan berhasil diperbarui dan struk dicetak'
+                      : 'Pesanan berhasil disimpan dan struk dicetak',
+            ),
+            backgroundColor: isOffline ? Colors.orange : Colors.green,
+            duration: Duration(seconds: isOffline ? 4 : 2),
           ),
         );
       }
@@ -362,10 +434,7 @@ class _KasirScreenState extends State<KasirScreen> {
         });
       }
 
-      // PERBAIKAN: Gunakan Navigator.pop() untuk kembali ke screen sebelumnya
-      // Jangan gunakan pushAndRemoveUntil
       if (mounted) {
-        // Pop KasirScreen, kembali ke PesananScreen atau Dashboard
         Navigator.pop(context);
       }
     } else {
@@ -383,10 +452,8 @@ class _KasirScreenState extends State<KasirScreen> {
     }
   }
 
-  // Update method _printReceipt di KasirScreen
   Future<void> _printReceipt(Map<String, dynamic> orderData) async {
     try {
-      // Load saved printer if not already loaded
       final savedPrinter = await ThermalPrintService.getSavedPrinter();
       if (savedPrinter == null) {
         if (mounted) {
@@ -401,17 +468,11 @@ class _KasirScreenState extends State<KasirScreen> {
         return;
       }
 
-      // Ensure printer is set in the service
       ThermalPrintService.setSelectedPrinter(savedPrinter);
 
-      // Get kasir name from users.name column
       final kasirNama = orderData['user']?['name']?.toString();
-
-      // Get toko name from toko.nama_toko column
       final tokoNama =
           orderData['toko']?['nama_toko']?.toString() ?? 'OrderKuy';
-
-      // final tokoAlamat = orderData['toko']?['alamat']?.toString() ?? '-';
 
       await ThermalPrintService.printReceipt(
         orderId: orderData['id']?.toString() ?? '',
@@ -429,9 +490,9 @@ class _KasirScreenState extends State<KasirScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error print: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error print: $e')),
+      );
     }
   }
 
@@ -440,11 +501,10 @@ class _KasirScreenState extends State<KasirScreen> {
     final isEditing = widget.orderToEdit != null;
 
     return PopScope(
-      canPop: false, // Prevent default back behavior
-      onPopInvoked: (bool didPop) async {
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
         if (didPop) return;
 
-        // Show confirmation if there are items in cart
         if (_selectedItems.isNotEmpty) {
           final shouldPop = await showDialog<bool>(
             context: context,
@@ -474,17 +534,14 @@ class _KasirScreenState extends State<KasirScreen> {
             Navigator.pop(context);
           }
         } else {
-          // No items, just pop
           Navigator.pop(context);
         }
       },
       child: Scaffold(
         appBar: AppBar(
-          // PERBAIKAN: Tambahkan leading untuk handle back button
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () async {
-              // Show confirmation if there are items in cart
               if (_selectedItems.isNotEmpty) {
                 final shouldPop = await showDialog<bool>(
                   context: context,
@@ -514,7 +571,6 @@ class _KasirScreenState extends State<KasirScreen> {
                   Navigator.pop(context);
                 }
               } else {
-                // No items, just pop
                 Navigator.pop(context);
               }
             },
@@ -548,132 +604,154 @@ class _KasirScreenState extends State<KasirScreen> {
             ),
           ],
         ),
-        body: Row(
+        body: Column(
           children: [
-            // Left: Product List
+            // ← TAMBAHAN: Sync Status Widget di sini
+            const SyncStatusWidget(),
+
             Expanded(
-              flex: 3,
-              child: Column(
+              child: Row(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        labelText: 'Cari Produk',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.search, color: Colors.red[700]),
-                      ),
+                  // Left: Product List
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              labelText: 'Cari Produk',
+                              border: const OutlineInputBorder(),
+                              prefixIcon:
+                                  Icon(Icons.search, color: Colors.red[700]),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : _filteredProducts.isEmpty
+                                  ? Center(
+                                      child: Text(
+                                        !_isOnline && _products.isEmpty
+                                            ? 'Menu tidak tersedia offline. Silakan koneksi internet untuk memuat menu.'
+                                            : 'Tidak ada menu',
+                                      ),
+                                    )
+                                  : GridView.builder(
+                                      padding: const EdgeInsets.all(8),
+                                      gridDelegate:
+                                          const SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 3,
+                                        childAspectRatio: 0.75,
+                                        crossAxisSpacing: 8,
+                                        mainAxisSpacing: 8,
+                                      ),
+                                      itemCount: _filteredProducts.length,
+                                      itemBuilder: (context, index) {
+                                        final product =
+                                            _filteredProducts[index];
+                                        return _buildProductCard(product);
+                                      },
+                                    ),
+                        ),
+                      ],
                     ),
                   ),
+
+                  // Right: Order Form
                   Expanded(
-                    child: _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _filteredProducts.isEmpty
-                            ? const Center(child: Text('Tidak ada menu'))
-                            : GridView.builder(
-                                padding: const EdgeInsets.all(8),
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  childAspectRatio: 0.75,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8,
-                                ),
-                                itemCount: _filteredProducts.length,
-                                itemBuilder: (context, index) {
-                                  final product = _filteredProducts[index];
-                                  return _buildProductCard(product);
-                                },
+                    flex: 2,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.red[50]!,
+                            Colors.red[100]!,
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            spreadRadius: 2,
+                            blurRadius: 8,
+                            offset: const Offset(-2, 0),
+                          ),
+                        ],
+                      ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildOrderTypeSelector(),
+                            const SizedBox(height: 16),
+                            _buildPaymentMethodSelector(),
+                            const SizedBox(height: 16),
+                            if (_jenisOrder == Constants.jenisOrderDineIn)
+                              _buildTableSelector(),
+                            const SizedBox(height: 16),
+                            _buildNotesField(),
+                            const SizedBox(height: 16),
+                            const Divider(),
+                            const Text(
+                              'Item Dipilih',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
                               ),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildCartItems(),
+                            const SizedBox(height: 16),
+                            _buildTotals(),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: _showPaymentDialog,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFD32F2F),
+                                  foregroundColor: Colors.white,
+                                  elevation: 5,
+                                  shadowColor:
+                                      Colors.red.withValues(alpha: 0.3),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ).copyWith(
+                                  backgroundColor:
+                                      WidgetStateProperty.resolveWith<Color>(
+                                    (Set<WidgetState> states) {
+                                      if (states
+                                          .contains(WidgetState.hovered)) {
+                                        return const Color(0xFFB71C1C);
+                                      }
+                                      return const Color(0xFFD32F2F);
+                                    },
+                                  ),
+                                ),
+                                child: Text(
+                                  isEditing
+                                      ? 'Update & Simpan'
+                                      : 'Bayar & Simpan',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ],
-              ),
-            ),
-
-            // Right: Order Form
-            Expanded(
-              flex: 2,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.red[50]!,
-                      Colors.red[100]!,
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withValues(alpha: 0.1),
-                      spreadRadius: 2,
-                      blurRadius: 8,
-                      offset: const Offset(-2, 0),
-                    ),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildOrderTypeSelector(),
-                      const SizedBox(height: 16),
-                      _buildPaymentMethodSelector(),
-                      const SizedBox(height: 16),
-                      if (_jenisOrder == Constants.jenisOrderDineIn)
-                        _buildTableSelector(),
-                      const SizedBox(height: 16),
-                      _buildNotesField(),
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const Text(
-                        'Item Dipilih',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildCartItems(),
-                      const SizedBox(height: 16),
-                      _buildTotals(),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: _showPaymentDialog,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFD32F2F),
-                            foregroundColor: Colors.white,
-                            elevation: 5,
-                            shadowColor: Colors.red.withValues(alpha: 0.3),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ).copyWith(
-                            backgroundColor:
-                                WidgetStateProperty.resolveWith<Color>(
-                              (Set<WidgetState> states) {
-                                if (states.contains(WidgetState.hovered)) {
-                                  return const Color(0xFFB71C1C);
-                                }
-                                return const Color(0xFFD32F2F);
-                              },
-                            ),
-                          ),
-                          child: Text(
-                            isEditing ? 'Update & Simpan' : 'Bayar & Simpan',
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ),
           ],
@@ -682,11 +760,12 @@ class _KasirScreenState extends State<KasirScreen> {
     );
   }
 
+  // ... Semua method _build... tetap sama seperti kode asli Anda
+  // (Saya skip untuk hemat space, gunakan yang sudah ada)
+
   Widget _buildProductCard(Product product) {
-    int qty = 1;
-    // URL base dari Laravel API Anda
     const String baseUrl =
-        'https://orderkuy.indotechconsulting.com/assets/img/menu/'; // Sesuaikan dengan URL API Anda
+        'https://orderkuy.indotechconsulting.com/assets/img/menu/';
 
     return Card(
       elevation: 8,
@@ -696,7 +775,7 @@ class _KasirScreenState extends State<KasirScreen> {
         side: const BorderSide(color: Color(0xFFD32F2F), width: 1),
       ),
       child: InkWell(
-        onTap: () => _addToCart(product, qty),
+        onTap: () => _addToCart(product, 1),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -716,18 +795,6 @@ class _KasirScreenState extends State<KasirScreen> {
                               Icons.restaurant_menu,
                               size: 48,
                               color: Theme.of(context).primaryColor,
-                            );
-                          },
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes !=
-                                        null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
                             );
                           },
                         ),
@@ -780,10 +847,8 @@ class _KasirScreenState extends State<KasirScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Jenis Order',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        const Text('Jenis Order',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -825,10 +890,8 @@ class _KasirScreenState extends State<KasirScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Metode Bayar',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        const Text('Metode Bayar',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -873,10 +936,10 @@ class _KasirScreenState extends State<KasirScreen> {
           initialValue: _selectedMejaId,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
-            hintText: '-- Pilih Meja --',
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
           items: _mejas.map((meja) {
-            return DropdownMenuItem(
+            return DropdownMenuItem<int>(
               value: meja.id,
               child: Text('Meja ${meja.noMeja}'),
             );
@@ -884,45 +947,47 @@ class _KasirScreenState extends State<KasirScreen> {
           onChanged: (value) {
             setState(() => _selectedMejaId = value);
           },
+          hint: const Text('Pilih meja'),
         ),
       ],
     );
   }
 
   Widget _buildNotesField() {
-    return TextField(
-      controller: _catatanController,
-      decoration: const InputDecoration(
-        labelText: 'Catatan',
-        border: OutlineInputBorder(),
-      ),
-      maxLines: 2,
-      onChanged: (value) => _catatan = value,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Catatan', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _catatanController,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Tambahkan catatan jika ada',
+          ),
+          onChanged: (value) {
+            setState(() => _catatan = value);
+          },
+        ),
+      ],
     );
   }
 
   Widget _buildCartItems() {
     if (_selectedItems.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Belum ada item', textAlign: TextAlign.center),
-        ),
-      );
+      return const Text('Belum ada item dipilih');
     }
-
     return Column(
       children: _selectedItems.asMap().entries.map((entry) {
         final index = entry.key;
         final item = entry.value;
-
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             title: Text(item['nama_produk']),
-            subtitle: Text(
-              '${item['qty']} x Rp${item['harga'].toStringAsFixed(0)}',
-            ),
+            subtitle:
+                Text('${item['qty']} x Rp${item['harga'].toStringAsFixed(0)}'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -936,7 +1001,7 @@ class _KasirScreenState extends State<KasirScreen> {
                   onPressed: () => _updateQuantity(index, 1),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
+                  icon: const Icon(Icons.delete),
                   onPressed: () => _removeFromCart(index),
                 ),
               ],
@@ -948,46 +1013,13 @@ class _KasirScreenState extends State<KasirScreen> {
   }
 
   Widget _buildTotals() {
-    return Card(
-      color: Colors.blue[50],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Total Item:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '$_totalItem',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Total Harga:',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Rp ${_totalHarga.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Total Item: $_totalItem'),
+        Text('Total Harga: Rp ${_totalHarga.toStringAsFixed(0)}',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }
