@@ -10,7 +10,7 @@ class DBHelper {
 
     _db = await openDatabase(
       join(await getDatabasesPath(), 'orderkuy.db'),
-      version: 4, // ← INCREMENT version untuk migration pengeluaran
+      version: 5, // ← INCREMENT version untuk kategoris cache
       onCreate: (db, v) async {
         await _createTables(db);
       },
@@ -59,7 +59,7 @@ class DBHelper {
           }
         }
 
-        // ← NEW: Pengeluaran offline table
+        // Pengeluaran offline table
         if (oldVersion < 4) {
           await db.execute('''
           CREATE TABLE IF NOT EXISTS pengeluaran_offline(
@@ -82,6 +82,19 @@ class DBHelper {
             deskripsi TEXT,
             toko_id INTEGER,
             user_id INTEGER,
+            last_updated TEXT
+          )
+          ''');
+        }
+
+        // ← NEW: Kategoris cache table
+        if (oldVersion < 5) {
+          await db.execute('''
+          CREATE TABLE IF NOT EXISTS kategoris_cache(
+            id INTEGER PRIMARY KEY,
+            nama_kategori TEXT,
+            icon TEXT,
+            toko_id INTEGER,
             last_updated TEXT
           )
           ''');
@@ -119,7 +132,7 @@ class DBHelper {
     )
     ''');
 
-    // ← NEW: Pengeluaran offline table
+    // Pengeluaran offline table
     await db.execute('''
     CREATE TABLE IF NOT EXISTS pengeluaran_offline(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,7 +145,7 @@ class DBHelper {
     )
     ''');
 
-    // ← NEW: Pengeluaran cache table
+    // Pengeluaran cache table
     await db.execute('''
     CREATE TABLE IF NOT EXISTS pengeluaran_cache(
       id INTEGER PRIMARY KEY,
@@ -145,6 +158,72 @@ class DBHelper {
       last_updated TEXT
     )
     ''');
+
+    // Kategoris cache table
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS kategoris_cache(
+      id INTEGER PRIMARY KEY,
+      nama_kategori TEXT,
+      icon TEXT,
+      toko_id INTEGER,
+      last_updated TEXT
+    )
+    ''');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // HELPER: Ensure table exists (safety check)
+  // ═══════════════════════════════════════════════════════════
+
+  static Future<void> _ensureTableExists(String tableName) async {
+    final database = await db;
+    try {
+      // Test if table exists by querying it
+      await database.rawQuery('SELECT 1 FROM $tableName LIMIT 1');
+    } catch (e) {
+      print('⚠️ Table $tableName does not exist, creating...');
+
+      // Create the missing table based on table name
+      if (tableName == 'kategoris_cache') {
+        await database.execute('''
+        CREATE TABLE IF NOT EXISTS kategoris_cache(
+          id INTEGER PRIMARY KEY,
+          nama_kategori TEXT,
+          icon TEXT,
+          toko_id INTEGER,
+          last_updated TEXT
+        )
+        ''');
+        print('✅ Table kategoris_cache created successfully');
+      } else if (tableName == 'pengeluaran_cache') {
+        await database.execute('''
+        CREATE TABLE IF NOT EXISTS pengeluaran_cache(
+          id INTEGER PRIMARY KEY,
+          nama_pengeluaran TEXT,
+          jumlah REAL,
+          tanggal TEXT,
+          deskripsi TEXT,
+          toko_id INTEGER,
+          user_id INTEGER,
+          last_updated TEXT
+        )
+        ''');
+        print('✅ Table pengeluaran_cache created successfully');
+      } else if (tableName == 'pengeluaran_offline') {
+        await database.execute('''
+        CREATE TABLE IF NOT EXISTS pengeluaran_offline(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_uuid TEXT UNIQUE NOT NULL,
+          payload TEXT,
+          created_at TEXT,
+          is_synced INTEGER DEFAULT 0,
+          sync_error TEXT,
+          server_id INTEGER
+        )
+        ''');
+        print('✅ Table pengeluaran_offline created successfully');
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -239,7 +318,7 @@ class DBHelper {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // OFFLINE PENGELUARAN - NEW!
+  // OFFLINE PENGELUARAN
   // ═══════════════════════════════════════════════════════════
 
   static Future<void> saveOfflinePengeluaran(
@@ -247,6 +326,7 @@ class DBHelper {
     String clientUuid,
   ) async {
     final database = await db;
+    await _ensureTableExists('pengeluaran_offline');
 
     // Check duplicate
     final existing = await database.query(
@@ -272,6 +352,8 @@ class DBHelper {
 
   static Future<List<Map<String, dynamic>>> getOfflinePengeluaran() async {
     final database = await db;
+    await _ensureTableExists('pengeluaran_offline');
+
     return await database.query(
       'pengeluaran_offline',
       where: 'is_synced = 0',
@@ -281,6 +363,8 @@ class DBHelper {
 
   static Future<int> getOfflinePengeluaranCount() async {
     final database = await db;
+    await _ensureTableExists('pengeluaran_offline');
+
     final result = await database.rawQuery(
         'SELECT COUNT(*) as count FROM pengeluaran_offline WHERE is_synced = 0');
     return result.first['count'] as int;
@@ -314,6 +398,8 @@ class DBHelper {
 
   static Future<void> clearSyncedPengeluaran() async {
     final database = await db;
+    await _ensureTableExists('pengeluaran_offline');
+
     await database.delete(
       'pengeluaran_offline',
       where: 'is_synced = 1',
@@ -329,6 +415,8 @@ class DBHelper {
     List<Map<String, dynamic>> pengeluaranList,
   ) async {
     final database = await db;
+    await _ensureTableExists('pengeluaran_cache');
+
     final batch = database.batch();
 
     // Clear existing cache
@@ -348,20 +436,29 @@ class DBHelper {
       });
     }
 
-    await batch.commit();
+    await batch.commit(noResult: true);
     print('✅ Cached ${pengeluaranList.length} pengeluaran');
   }
 
   static Future<List<Map<String, dynamic>>> getPengeluaranFromCache() async {
     final database = await db;
+    await _ensureTableExists('pengeluaran_cache');
+
     return await database.query('pengeluaran_cache');
   }
 
   static Future<bool> hasPengeluaranCache() async {
-    final database = await db;
-    final result = await database
-        .rawQuery('SELECT COUNT(*) as count FROM pengeluaran_cache');
-    return result.first['count'] as int > 0;
+    try {
+      final database = await db;
+      await _ensureTableExists('pengeluaran_cache');
+
+      final result = await database
+          .rawQuery('SELECT COUNT(*) as count FROM pengeluaran_cache');
+      return (result.first['count'] as int) > 0;
+    } catch (e) {
+      print('❌ Error checking pengeluaran cache: $e');
+      return false;
+    }
   }
 
   // Add single pengeluaran to cache (for offline created items)
@@ -369,6 +466,8 @@ class DBHelper {
     Map<String, dynamic> pengeluaran,
   ) async {
     final database = await db;
+    await _ensureTableExists('pengeluaran_cache');
+
     await database.insert('pengeluaran_cache', {
       'id': pengeluaran['id'] ?? DateTime.now().millisecondsSinceEpoch,
       'nama_pengeluaran': pengeluaran['nama_pengeluaran'],
@@ -382,7 +481,7 @@ class DBHelper {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PRODUCT CACHE (existing code - no changes)
+  // PRODUCT CACHE
   // ═══════════════════════════════════════════════════════════
 
   static Future<void> saveProductsToCache(
@@ -406,7 +505,7 @@ class DBHelper {
       });
     }
 
-    await batch.commit();
+    await batch.commit(noResult: true);
     print('✅ Cached ${products.length} products');
   }
 
@@ -419,7 +518,7 @@ class DBHelper {
     final database = await db;
     final result =
         await database.rawQuery('SELECT COUNT(*) as count FROM products_cache');
-    return result.first['count'] as int > 0;
+    return (result.first['count'] as int) > 0;
   }
 
   static Future<DateTime?> getProductsCacheTimestamp() async {
@@ -445,6 +544,85 @@ class DBHelper {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // KATEGORIS CACHE - FIXED with robust error handling
+  // ═══════════════════════════════════════════════════════════
+
+  static Future<void> saveKategorisToCache(
+    List<Map<String, dynamic>> kategoris,
+  ) async {
+    try {
+      final database = await db;
+      await _ensureTableExists('kategoris_cache');
+
+      final batch = database.batch();
+
+      // Clear existing cache
+      batch.delete('kategoris_cache');
+
+      // Insert new data
+      for (final item in kategoris) {
+        batch.insert('kategoris_cache', {
+          'id': item['id'],
+          'nama_kategori': item['nama_kategori'] ?? item['name'] ?? '',
+          'icon': item['icon'] ?? '',
+          'toko_id': item['toko_id'] ?? 0,
+          'last_updated': DateTime.now().toIso8601String(),
+        });
+      }
+
+      await batch.commit(noResult: true);
+      print('✅ Cached ${kategoris.length} kategoris');
+    } catch (e) {
+      print('❌ Error saving kategoris to cache: $e');
+    }
+  }
+
+  static Future<bool> hasKategorisCache() async {
+    try {
+      final database = await db;
+      await _ensureTableExists('kategoris_cache');
+
+      final result = await database
+          .rawQuery('SELECT COUNT(*) as count FROM kategoris_cache');
+      return (result.first['count'] as int) > 0;
+    } catch (e) {
+      print('❌ Error checking kategoris cache: $e');
+      return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getKategorisFromCache() async {
+    try {
+      final database = await db;
+      await _ensureTableExists('kategoris_cache');
+
+      return await database.query('kategoris_cache');
+    } catch (e) {
+      print('❌ Error getting kategoris from cache: $e');
+      return [];
+    }
+  }
+
+  static Future<DateTime?> getKategorisCacheTimestamp() async {
+    try {
+      final database = await db;
+      await _ensureTableExists('kategoris_cache');
+
+      final result = await database.query(
+        'kategoris_cache',
+        columns: ['last_updated'],
+        limit: 1,
+      );
+
+      if (result.isEmpty) return null;
+      return DateTime.parse(result.first['last_updated'] as String);
+    } catch (e) {
+      print('❌ Error getting kategoris cache timestamp: $e');
+      return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // DATABASE UTILITIES
   // ═══════════════════════════════════════════════════════════
 
@@ -454,6 +632,20 @@ class DBHelper {
     await database.delete('orders_offline');
     await database.delete('pengeluaran_offline');
     await database.delete('pengeluaran_cache');
+    await database.delete('kategoris_cache');
     print('🧹 All cache cleared');
+  }
+
+  // Force recreate all tables (use only for debugging)
+  static Future<void> resetDatabase() async {
+    try {
+      final dbPath = join(await getDatabasesPath(), 'orderkuy.db');
+      await deleteDatabase(dbPath);
+      _db = null;
+      print('🔄 Database reset successfully');
+      await db; // Reinitialize
+    } catch (e) {
+      print('❌ Error resetting database: $e');
+    }
   }
 }

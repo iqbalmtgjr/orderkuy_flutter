@@ -1,11 +1,10 @@
-// FILE INI DIGUNAKAN - Handle String dari API Laravel
-
 class Product {
   final int id;
   final String namaProduk;
   final double harga;
   final int qty;
   final String? foto;
+  final int kategoriId;
   final String? kategori;
   final int tokoId;
 
@@ -15,6 +14,7 @@ class Product {
     required this.harga,
     required this.qty,
     this.foto,
+    required this.kategoriId,
     this.kategori,
     required this.tokoId,
   });
@@ -27,6 +27,7 @@ class Product {
       harga: _parseDouble(json['harga']),
       qty: _parseInt(json['qty']),
       foto: json['foto'],
+      kategoriId: json['kategori_id'],
       kategori: json['kategori'],
       tokoId: json['toko_id'],
     );
@@ -39,6 +40,7 @@ class Product {
       'harga': harga,
       'qty': qty,
       'foto': foto,
+      'kategori_id': kategoriId,
       'kategori': kategori,
       'toko_id': tokoId,
     };

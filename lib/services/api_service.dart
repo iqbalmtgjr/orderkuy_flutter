@@ -8,6 +8,7 @@ import '../utils/constants.dart';
 import '../models/product.dart';
 import '../models/meja.dart';
 import '../models/order.dart';
+import '../models/kategori.dart';
 import '../models/pengeluaran.dart';
 import '../core/database/db_helper.dart';
 import '../core/database/offline_queue_db.dart';
@@ -1045,6 +1046,106 @@ class ApiService {
     } catch (e) {
       debugPrint('Error getRiwayatDetail: $e');
       rethrow;
+    }
+  }
+
+  static Future<List<Kategori>> getKategoris() async {
+    final conn = await Connectivity().checkConnectivity();
+
+    // If offline, load from cache
+    if (conn == ConnectivityResult.none) {
+      debugPrint('Offline: Loading kategoris from cache');
+      final hasCache = await DBHelper.hasKategorisCache();
+      if (hasCache) {
+        final cachedKategoris = await DBHelper.getKategorisFromCache();
+        return cachedKategoris.map((k) => Kategori.fromJson(k)).toList();
+      } else {
+        debugPrint('No cached kategoris available');
+        return [];
+      }
+    }
+
+    // Online: fetch from API and cache
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(Constants.tokenKey);
+
+      if (token == null) {
+        debugPrint('Token tidak ditemukan');
+        return [];
+      }
+
+      debugPrint('Fetching kategoris from: $baseUrl/kategoris');
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/kategoris'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      debugPrint('Kategoris response status: ${response.statusCode}');
+      debugPrint('Kategoris response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['success']) {
+          final kategorisList = data['kategoris'] as List;
+          final kategorisListCasted =
+              kategorisList.map((k) => k as Map<String, dynamic>).toList();
+
+          // Cache the kategoris
+          await DBHelper.saveKategorisToCache(kategorisListCasted);
+
+          final kategoris =
+              kategorisListCasted.map((k) => Kategori.fromJson(k)).toList();
+
+          debugPrint('Kategoris loaded: ${kategoris.length}');
+          for (var k in kategoris) {
+            debugPrint('  - ID: ${k.id}, Nama: ${k.namaKategori}');
+          }
+
+          return kategoris;
+        } else {
+          debugPrint('API returned success: false');
+
+          // Fallback to cache if API fails
+          final hasCache = await DBHelper.hasKategorisCache();
+          if (hasCache) {
+            debugPrint('Loading from cache as fallback');
+            final cachedKategoris = await DBHelper.getKategorisFromCache();
+            return cachedKategoris.map((k) => Kategori.fromJson(k)).toList();
+          }
+
+          return [];
+        }
+      } else {
+        debugPrint('API error: ${response.statusCode}');
+
+        // Fallback to cache if API fails
+        final hasCache = await DBHelper.hasKategorisCache();
+        if (hasCache) {
+          debugPrint('Loading from cache due to API error');
+          final cachedKategoris = await DBHelper.getKategorisFromCache();
+          return cachedKategoris.map((k) => Kategori.fromJson(k)).toList();
+        }
+
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Error getting kategoris: $e');
+
+      // On error, try to load from cache
+      final hasCache = await DBHelper.hasKategorisCache();
+      if (hasCache) {
+        debugPrint('Loading from cache due to error');
+        final cachedKategoris = await DBHelper.getKategorisFromCache();
+        return cachedKategoris.map((k) => Kategori.fromJson(k)).toList();
+      }
+
+      return [];
     }
   }
 

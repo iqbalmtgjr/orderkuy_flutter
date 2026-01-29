@@ -3,11 +3,12 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/api_service.dart';
 import '../services/print_service.dart';
 import '../models/product.dart';
+import '../models/kategori.dart';
 import '../models/meja.dart';
 import '../models/order.dart';
 import '../utils/constants.dart';
 import 'printer_setup_screen.dart';
-import '../widgets/sync_status_widget.dart'; // ← IMPORT WIDGET BARU
+import '../widgets/sync_status_widget.dart';
 
 class KasirScreen extends StatefulWidget {
   final Order? orderToEdit;
@@ -20,16 +21,21 @@ class KasirScreen extends StatefulWidget {
 class _KasirScreenState extends State<KasirScreen> {
   List<Product> _products = [];
   List<Product> _filteredProducts = [];
+  List<Kategori> _kategoris = [];
   List<Meja> _mejas = [];
   final List<Map<String, dynamic>> _selectedItems = [];
   bool _isLoading = true;
-  bool _isOnline = true; // ← TAMBAHAN: Track connection status
+  bool _isOnline = true;
 
   // Form fields
   int _jenisOrder = Constants.jenisOrderDineIn;
   int _metodeBayar = Constants.metodeBayarCash;
   int? _selectedMejaId;
   String _catatan = '';
+
+  // Filter
+  int? _selectedKategoriFilter; // null = semua kategori
+  String _searchQuery = '';
 
   // Cart
   double _totalHarga = 0;
@@ -45,11 +51,14 @@ class _KasirScreenState extends State<KasirScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _checkConnectivity(); // ← TAMBAHAN: Check initial connectivity
-    _listenToConnectivity(); // ← TAMBAHAN: Listen to changes
+    _checkConnectivity();
+    _listenToConnectivity();
 
     _searchController.addListener(() {
-      _filterProducts(_searchController.text);
+      setState(() {
+        _searchQuery = _searchController.text;
+        _applyFilters();
+      });
     });
 
     // Populate form if editing
@@ -116,12 +125,14 @@ class _KasirScreenState extends State<KasirScreen> {
     setState(() => _isLoading = true);
 
     final products = await ApiService.getMenus();
+    final kategoris = await ApiService.getKategoris();
     final mejas = widget.orderToEdit != null
         ? await ApiService.getAllTables()
         : await ApiService.getFreeTables();
 
     setState(() {
       _products = products;
+      _kategoris = kategoris;
       _filteredProducts = products;
       _mejas = mejas;
       _isLoading = false;
@@ -145,15 +156,21 @@ class _KasirScreenState extends State<KasirScreen> {
     }
   }
 
-  void _filterProducts(String query) {
+  void _applyFilters() {
     setState(() {
-      if (query.isEmpty) {
-        _filteredProducts = _products;
-      } else {
-        _filteredProducts = _products.where((product) {
-          return product.namaProduk.toLowerCase().contains(query.toLowerCase());
-        }).toList();
-      }
+      _filteredProducts = _products.where((product) {
+        // Filter by kategori
+        final matchKategori = _selectedKategoriFilter == null ||
+            product.kategoriId == _selectedKategoriFilter;
+
+        // Filter by search query
+        final matchSearch = _searchQuery.isEmpty ||
+            product.namaProduk
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase());
+
+        return matchKategori && matchSearch;
+      }).toList();
     });
   }
 
@@ -253,7 +270,6 @@ class _KasirScreenState extends State<KasirScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ← TAMBAHAN: Offline indicator di dialog
                   if (!_isOnline)
                     Container(
                       padding: const EdgeInsets.all(8),
@@ -280,7 +296,6 @@ class _KasirScreenState extends State<KasirScreen> {
                         ],
                       ),
                     ),
-
                   Text(
                     'Total: Rp ${_totalHarga.toStringAsFixed(0)}',
                     style: const TextStyle(
@@ -397,7 +412,6 @@ class _KasirScreenState extends State<KasirScreen> {
     Navigator.pop(context); // Close loading dialog
 
     if (result['success']) {
-      // ← MODIFIED: Show different message for offline
       final isOffline = result['offline'] == true;
 
       // Print receipt only if online or if we have order data
@@ -606,9 +620,7 @@ class _KasirScreenState extends State<KasirScreen> {
         ),
         body: Column(
           children: [
-            // ← TAMBAHAN: Sync Status Widget di sini
             const SyncStatusWidget(),
-
             Expanded(
               child: Row(
                 children: [
@@ -617,6 +629,7 @@ class _KasirScreenState extends State<KasirScreen> {
                     flex: 3,
                     child: Column(
                       children: [
+                        // Search Bar
                         Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: TextField(
@@ -629,6 +642,11 @@ class _KasirScreenState extends State<KasirScreen> {
                             ),
                           ),
                         ),
+
+                        // Kategori Filter
+                        _buildKategoriFilter(),
+
+                        // Product Grid
                         Expanded(
                           child: _isLoading
                               ? const Center(child: CircularProgressIndicator())
@@ -760,8 +778,76 @@ class _KasirScreenState extends State<KasirScreen> {
     );
   }
 
-  // ... Semua method _build... tetap sama seperti kode asli Anda
-  // (Saya skip untuk hemat space, gunakan yang sudah ada)
+  // ═══════════════════════════════════════════════════════════
+  // KATEGORI FILTER WIDGET (BARU)
+  // ═══════════════════════════════════════════════════════════
+
+  Widget _buildKategoriFilter() {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          // Chip "Semua"
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: const Text('Semua'),
+              selected: _selectedKategoriFilter == null,
+              onSelected: (selected) {
+                setState(() {
+                  _selectedKategoriFilter = null;
+                  _applyFilters();
+                });
+              },
+              selectedColor: const Color(0xFFD32F2F),
+              backgroundColor: Colors.grey[200],
+              labelStyle: TextStyle(
+                color: _selectedKategoriFilter == null
+                    ? Colors.white
+                    : Colors.black87,
+                fontWeight: _selectedKategoriFilter == null
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+              ),
+            ),
+          ),
+
+          // Chips untuk setiap kategori
+          ..._kategoris.map((kategori) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text(kategori.namaKategori),
+                selected: _selectedKategoriFilter == kategori.id,
+                onSelected: (selected) {
+                  setState(() {
+                    _selectedKategoriFilter = selected ? kategori.id : null;
+                    _applyFilters();
+                  });
+                },
+                selectedColor: const Color(0xFFD32F2F),
+                backgroundColor: Colors.grey[200],
+                labelStyle: TextStyle(
+                  color: _selectedKategoriFilter == kategori.id
+                      ? Colors.white
+                      : Colors.black87,
+                  fontWeight: _selectedKategoriFilter == kategori.id
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BUILD METHODS (SAMA SEPERTI SEBELUMNYA)
+  // ═══════════════════════════════════════════════════════════
 
   Widget _buildProductCard(Product product) {
     const String baseUrl =
