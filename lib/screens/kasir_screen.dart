@@ -378,11 +378,29 @@ class _KasirScreenState extends State<KasirScreen> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════
+// OPTIMIZED VERSION - KASIR_SCREEN.DART
+// Replace _savePesanan() dan _printReceipt() methods dengan yang ini
+// ═══════════════════════════════════════════════════════════
+
   Future<void> _savePesanan() async {
+    // ← SHOW LOADING: Simpan pesanan
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+      builder: (context) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 16),
+            Text(
+              'Menyimpan pesanan...',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
     );
 
     final orderData = {
@@ -409,30 +427,68 @@ class _KasirScreenState extends State<KasirScreen> {
         : await ApiService.createOrder(orderData);
 
     if (!mounted) return;
-    Navigator.pop(context); // Close loading dialog
+    Navigator.pop(context); // Close "Menyimpan pesanan..." loading
 
     if (result['success']) {
       final isOffline = result['offline'] == true;
 
-      // Print receipt only if online or if we have order data
+      // ← OPTIMIZED: Print langsung tanpa dialog tambahan
       if (!isOffline && result['data'] != null) {
-        await _printReceipt(result['data']);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isOffline
-                  ? '📵 Pesanan disimpan offline, akan tersinkron saat online'
-                  : isEditing
-                      ? 'Pesanan berhasil diperbarui dan struk dicetak'
-                      : 'Pesanan berhasil disimpan dan struk dicetak',
+        // Show print loading
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Colors.white),
+                SizedBox(height: 16),
+                Text(
+                  'Mencetak struk...',
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ],
             ),
-            backgroundColor: isOffline ? Colors.orange : Colors.green,
-            duration: Duration(seconds: isOffline ? 4 : 2),
           ),
         );
+
+        final printSuccess = await _printReceipt(result['data']);
+
+        if (!mounted) return;
+        Navigator.pop(context); // Close print loading
+
+        // Show appropriate message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                printSuccess
+                    ? (isEditing
+                        ? 'Pesanan berhasil diperbarui dan struk dicetak'
+                        : 'Pesanan berhasil disimpan dan struk dicetak')
+                    : (isEditing
+                        ? 'Pesanan berhasil diperbarui tapi struk gagal dicetak'
+                        : 'Pesanan berhasil disimpan tapi struk gagal dicetak'),
+              ),
+              backgroundColor: printSuccess ? Colors.green : Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // Offline mode
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                '📵 Pesanan disimpan offline, akan tersinkron saat online',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
       }
 
       // Reset form only if creating new order
@@ -466,20 +522,15 @@ class _KasirScreenState extends State<KasirScreen> {
     }
   }
 
-  Future<void> _printReceipt(Map<String, dynamic> orderData) async {
+  // ← OPTIMIZED: Return bool untuk indikasi sukses/gagal
+  Future<bool> _printReceipt(Map<String, dynamic> orderData) async {
     try {
+      // ← REMOVED: Tidak ada dialog tambahan di sini, sudah ada di _savePesanan
+
       final savedPrinter = await ThermalPrintService.getSavedPrinter();
       if (savedPrinter == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Printer belum dipilih. Silakan pilih printer terlebih dahulu.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
+        debugPrint('⚠️ Printer belum dipilih');
+        return false;
       }
 
       ThermalPrintService.setSelectedPrinter(savedPrinter);
@@ -488,7 +539,8 @@ class _KasirScreenState extends State<KasirScreen> {
       final tokoNama =
           orderData['toko']?['nama_toko']?.toString() ?? 'OrderKuy';
 
-      await ThermalPrintService.printReceipt(
+      // ← PRINT: Langsung dengan timeout yang sudah dioptimasi
+      final success = await ThermalPrintService.printReceipt(
         orderId: orderData['id']?.toString() ?? '',
         tokoNama: tokoNama,
         tokoAlamat: orderData['toko']?['alamat']?.toString() ?? '-',
@@ -502,11 +554,11 @@ class _KasirScreenState extends State<KasirScreen> {
         metodeBayar: _metodeBayar,
         kasirNama: kasirNama,
       );
+
+      return success;
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error print: $e')),
-      );
+      debugPrint('❌ Error print: $e');
+      return false;
     }
   }
 

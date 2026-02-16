@@ -166,9 +166,9 @@ class ThermalPrintService {
 
       // Connect with REDUCED timeout
       await _printer.connect(_selectedPrinter!).timeout(
-        const Duration(seconds: 15), // ← REDUCED: 5 seconds
+        const Duration(seconds: 20), // ← REDUCED: 5 seconds
         onTimeout: () {
-          throw TimeoutException('Connection timeout (15s)');
+          throw TimeoutException('Connection timeout (20s)');
         },
       );
 
