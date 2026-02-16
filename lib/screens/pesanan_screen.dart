@@ -119,30 +119,13 @@ class _PesananScreenState extends State<PesananScreen> {
 
   Future<void> _printReceipt(Order order) async {
     try {
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 16),
-              Text(
-                'Menghubungkan ke printer...',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-      );
+      // ← REMOVED: Dialog "Menghubungkan ke printer" - terlalu lama
+      // Langsung cek printer saja
 
       final savedPrinter = await ThermalPrintService.getSavedPrinter();
 
       if (savedPrinter == null) {
         if (!mounted) return;
-        Navigator.pop(context);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -166,8 +149,8 @@ class _PesananScreenState extends State<PesananScreen> {
               })
           .toList();
 
+      // ← SHOW LOADING: Hanya saat print mulai
       if (!mounted) return;
-      Navigator.pop(context);
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -184,6 +167,7 @@ class _PesananScreenState extends State<PesananScreen> {
         ),
       );
 
+      // ← PRINT: Dengan timeout yang lebih pendek
       final success = await ThermalPrintService.printReceipt(
         orderId: order.id.toString(),
         tokoNama: order.tokoNama ?? 'OrderKuy',
@@ -200,7 +184,7 @@ class _PesananScreenState extends State<PesananScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context); // Close loading
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(

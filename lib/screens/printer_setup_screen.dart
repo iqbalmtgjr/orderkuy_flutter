@@ -16,54 +16,12 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   Printer? _selectedPrinter;
   Printer? _savedPrinter;
   bool _isScanning = false;
-  bool _isReconnecting = false;
+  bool _isConnecting = false;
 
   @override
   void initState() {
     super.initState();
     _loadSavedPrinter();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Reload printer state when returning to this screen
-    _refreshPrinterState();
-  }
-
-  Future<void> _refreshPrinterState() async {
-    // Get saved printer (ini akan return existing instance jika ada)
-    final saved = await ThermalPrintService.getSavedPrinter();
-    if (mounted) {
-      setState(() {
-        _savedPrinter = saved;
-        _selectedPrinter ??= saved;
-      });
-
-      // Try to reconnect silently jika ada saved printer
-      if (saved != null && !ThermalPrintService.isConnected()) {
-        _silentReconnect();
-      }
-    }
-  }
-
-  Future<void> _silentReconnect() async {
-    if (_isReconnecting) return;
-
-    setState(() => _isReconnecting = true);
-
-    debugPrint('Attempting silent reconnection...');
-    final success = await ThermalPrintService.ensureConnected();
-
-    if (mounted) {
-      setState(() => _isReconnecting = false);
-
-      if (success) {
-        debugPrint('Silent reconnection successful');
-      } else {
-        debugPrint('Silent reconnection failed');
-      }
-    }
   }
 
   Future<void> _loadSavedPrinter() async {
@@ -73,7 +31,26 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         _savedPrinter = saved;
         _selectedPrinter = saved;
       });
+
+      // Show connection status
+      if (saved != null) {
+        _showConnectionStatus();
+      }
     }
+  }
+
+  void _showConnectionStatus() {
+    final isConnected = ThermalPrintService.isConnected();
+    final age = ThermalPrintService.getConnectionAge();
+
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint('🖨️ PRINTER STATUS:');
+    debugPrint('Connected: $isConnected');
+    debugPrint('Connection Age: ${age}s');
+    debugPrint(
+        'Consecutive Errors: ${ThermalPrintService.getConsecutiveErrors()}');
+    debugPrint('Printer: ${_savedPrinter?.name}');
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
   Future<void> _scanPrinters() async {
@@ -83,16 +60,16 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
     });
 
     try {
-      // Request Bluetooth permissions first
+      // Request permissions
       final permissionsGranted =
           await PermissionService.requestBluetoothPermissions(context);
+
       if (!permissionsGranted) {
         if (mounted) {
           setState(() => _isScanning = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                  'Izin Bluetooth dan lokasi diperlukan untuk scan printer'),
+              content: Text('Izin Bluetooth diperlukan untuk scan printer'),
               backgroundColor: Colors.red,
             ),
           );
@@ -100,7 +77,10 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         return;
       }
 
+      debugPrint('🔍 Scanning for printers...');
       final printers = await ThermalPrintService.getAvailablePrinters();
+      debugPrint('📡 Found ${printers.length} printers');
+
       if (mounted) {
         setState(() {
           _printers = printers;
@@ -108,21 +88,23 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         });
 
         if (printers.isEmpty) {
-          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Tidak ada printer ditemukan'),
+              content: Text(
+                  'Tidak ada printer ditemukan. Pastikan printer Bluetooth aktif.'),
               backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
             ),
           );
         }
       }
     } catch (e) {
+      debugPrint('❌ Scan error: $e');
       if (mounted) {
         setState(() => _isScanning = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error scanning: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -131,30 +113,61 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _selectPrinter(Printer printer) async {
+    if (_isConnecting) return;
+
+    setState(() => _isConnecting = true);
+
     // Show connecting dialog
     if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Menghubungkan ke printer...',
-                style: TextStyle(color: Colors.white, fontSize: 14)),
-          ],
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Menghubungkan ke printer...',
+                      style: TextStyle(fontSize: 14)),
+                  SizedBox(height: 8),
+                  Text('Mohon tunggu...',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
 
     try {
-      // Save printer
-      await ThermalPrintService.saveSelectedPrinter(printer);
+      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      debugPrint('🔗 Selecting printer: ${printer.name}');
+      debugPrint('Address: ${printer.address}');
 
-      // Try to connect immediately
-      final connected = await ThermalPrintService.connectPrinter(printer);
+      // Step 1: Save printer first
+      await ThermalPrintService.saveSelectedPrinter(printer);
+      debugPrint('✅ Printer saved');
+
+      // Step 2: Try to connect with longer timeout (RPP02N needs ~10s)
+      debugPrint('⏳ Attempting connection...');
+      final connected =
+          await ThermalPrintService.connectPrinter(printer).timeout(
+        const Duration(seconds: 15), // ← INCREASED: 15s for slow BLE printers
+        onTimeout: () {
+          debugPrint('⏰ Connection timeout after 15s!');
+          return false;
+        },
+      );
+
+      debugPrint('Connection result: $connected');
+      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
@@ -162,26 +175,64 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       setState(() {
         _selectedPrinter = printer;
         _savedPrinter = printer;
+        _isConnecting = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            connected
-                ? 'Printer ${printer.name} berhasil disimpan dan terhubung'
-                : 'Printer ${printer.name} berhasil disimpan (koneksi gagal)',
+      if (connected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Printer ${printer.name} berhasil terhubung!'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
           ),
-          backgroundColor: connected ? Colors.green : Colors.orange,
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.warning, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Text('Koneksi ke ${printer.name} gagal'),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Printer tersimpan. Tekan "Test Print" untuk coba lagi.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } catch (e) {
+      debugPrint('❌ Select printer error: $e');
+
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
+
+      setState(() => _isConnecting = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -198,44 +249,120 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       return;
     }
 
-    // Show loading
+    // Show loading with better UI
     if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Testing printer...',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Testing printer...',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text('Mengirim data ke printer...',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
 
-    final success = await ThermalPrintService.printTest();
+    try {
+      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      debugPrint('🖨️ Starting test print...');
 
-    if (!mounted) return;
-    Navigator.pop(context); // Close loading
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Test print berhasil! Printer terhubung.'),
-          backgroundColor: Colors.green,
-        ),
+      final startTime = DateTime.now();
+      final success = await ThermalPrintService.printTest().timeout(
+        const Duration(seconds: 20), // ← INCREASED: 20s total (connect + print)
+        onTimeout: () {
+          debugPrint('⏰ Print timeout after 20s!');
+          return false;
+        },
       );
-    } else {
+
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('Print completed in ${elapsed}ms');
+      debugPrint('Success: $success');
+      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      if (success) {
+        _showConnectionStatus(); // Update status in console
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Test print berhasil!',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('Print time: ${elapsed}ms',
+                    style: const TextStyle(fontSize: 11)),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.error, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Test print gagal'),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Pastikan:\n• Printer Bluetooth aktif\n• Printer tidak digunakan aplikasi lain\n• Printer ada kertas',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Test print error: $e');
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Test print gagal. Cek koneksi printer.'),
+        SnackBar(
+          content: Text('Error: $e'),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 4),
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -255,7 +382,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
+              backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
             child: const Text('Ya, Hapus'),
@@ -266,12 +393,11 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
     if (confirm == true) {
       try {
-        // Clear saved data
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('printer_address');
         await prefs.remove('printer_name');
 
-        // Clear service state
+        ThermalPrintService.clearConnectionState();
         ThermalPrintService.setSelectedPrinter(null);
 
         if (mounted) {
@@ -282,7 +408,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Printer tersimpan berhasil dihapus'),
+              content: Text('Printer berhasil dihapus'),
               backgroundColor: Colors.green,
             ),
           );
@@ -308,7 +434,6 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         backgroundColor: Colors.red.shade900,
         foregroundColor: Colors.white,
         actions: [
-          // Connection status indicator
           if (_savedPrinter != null)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -324,8 +449,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                           : Colors.white70,
                       size: 20,
                     ),
-                    const SizedBox(width: 4),
-                    if (_isReconnecting)
+                    if (_isConnecting) ...[
+                      const SizedBox(width: 8),
                       const SizedBox(
                         width: 12,
                         height: 12,
@@ -334,6 +459,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                           color: Colors.white,
                         ),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -348,15 +474,33 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                gradient: LinearGradient(
+                  colors: [
+                    ThermalPrintService.isConnected()
+                        ? Colors.green.shade50
+                        : Colors.blue.shade50,
+                    Colors.white,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade200),
+                border: Border.all(
+                  color: ThermalPrintService.isConnected()
+                      ? Colors.green.shade200
+                      : Colors.blue.shade200,
+                ),
               ),
               child: Row(
                 children: [
                   Icon(
-                    Icons.info_outline,
-                    color: Colors.blue.shade700,
+                    ThermalPrintService.isConnected()
+                        ? Icons.check_circle
+                        : Icons.info_outline,
+                    color: ThermalPrintService.isConnected()
+                        ? Colors.green.shade700
+                        : Colors.blue.shade700,
+                    size: 32,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -386,8 +530,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                               ),
                               child: Text(
                                 ThermalPrintService.isConnected()
-                                    ? 'Terhubung'
-                                    : 'Terputus',
+                                    ? 'ONLINE'
+                                    : 'OFFLINE',
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: ThermalPrintService.isConnected()
@@ -399,7 +543,14 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                             ),
                           ],
                         ),
-                        Text(_savedPrinter!.name ?? 'Unknown'),
+                        const SizedBox(height: 4),
+                        Text(
+                          _savedPrinter!.name ?? 'Unknown',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                         Text(
                           _savedPrinter!.address ?? '',
                           style: const TextStyle(
@@ -407,15 +558,17 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                             color: Colors.grey,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Text(
                           ThermalPrintService.isConnected()
-                              ? 'Siap untuk print'
-                              : 'Tekan "Test Print" untuk menghubungkan',
+                              ? '✓ Siap untuk print'
+                              : '⚠ Tekan "Test Print" untuk menghubungkan',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.blue.shade700,
-                            fontStyle: FontStyle.italic,
+                            color: ThermalPrintService.isConnected()
+                                ? Colors.green.shade700
+                                : Colors.orange.shade700,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -444,7 +597,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                       )
                     : const Icon(Icons.search),
                 label: Text(
-                  _isScanning ? 'Mencari Printer...' : 'Scan Printer',
+                  _isScanning ? 'Mencari Printer...' : 'Scan Printer Bluetooth',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade900,
@@ -471,6 +625,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                           'Tidak ada printer',
                           style: TextStyle(
                             fontSize: 18,
+                            fontWeight: FontWeight.bold,
                             color: Colors.grey.shade600,
                           ),
                         ),
@@ -492,6 +647,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
                       return Card(
                         elevation: isSelected ? 8 : 2,
+                        margin: const EdgeInsets.only(bottom: 8),
                         color: isSelected ? Colors.blue.shade50 : null,
                         child: ListTile(
                           leading: Icon(
@@ -499,6 +655,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                             color: isSelected
                                 ? Colors.blue.shade700
                                 : Colors.grey.shade600,
+                            size: 32,
                           ),
                           title: Text(
                             printer.name ?? 'Unknown Printer',
@@ -514,7 +671,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                                   Icons.check_circle,
                                   color: Colors.blue.shade700,
                                 )
-                              : null,
+                              : const Icon(Icons.arrow_forward_ios, size: 16),
                           onTap: () => _selectPrinter(printer),
                         ),
                       );
@@ -524,36 +681,50 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
           // Action Buttons
           if (_selectedPrinter != null)
-            Padding(
+            Container(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Column(
                 children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: _testPrint,
-                        icon: const Icon(Icons.print),
-                        label: const Text('Test Print & Koneksi'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
-                          foregroundColor: Colors.white,
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: _testPrint,
+                      icon: const Icon(Icons.print),
+                      label: const Text(
+                        'Test Print & Koneksi',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
                         ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade700,
+                        foregroundColor: Colors.white,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: OutlinedButton.icon(
-                        onPressed: _clearSavedPrinter,
-                        icon: const Icon(Icons.delete_forever),
-                        label: const Text('Hapus Printer Tersimpan'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.orange.shade700,
-                          side: BorderSide(color: Colors.orange.shade700),
-                        ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 45,
+                    child: OutlinedButton.icon(
+                      onPressed: _clearSavedPrinter,
+                      icon: const Icon(Icons.delete_forever, size: 20),
+                      label: const Text('Hapus Printer'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade700,
+                        side: BorderSide(color: Colors.red.shade300),
                       ),
                     ),
                   ),
