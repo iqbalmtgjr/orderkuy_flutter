@@ -37,7 +37,7 @@ class DBHelper {
             ADD COLUMN client_uuid TEXT
             ''');
           } catch (e) {
-            print('Column client_uuid already exists or error: $e');
+            //print('Column client_uuid already exists or error: $e');
           }
 
           try {
@@ -46,7 +46,7 @@ class DBHelper {
             ADD COLUMN sync_error TEXT
             ''');
           } catch (e) {
-            print('Column sync_error already exists or error: $e');
+            //print('Column sync_error already exists or error: $e');
           }
 
           try {
@@ -55,7 +55,7 @@ class DBHelper {
             ADD COLUMN server_id INTEGER
             ''');
           } catch (e) {
-            print('Column server_id already exists or error: $e');
+            //print('Column server_id already exists or error: $e');
           }
         }
 
@@ -181,7 +181,7 @@ class DBHelper {
       // Test if table exists by querying it
       await database.rawQuery('SELECT 1 FROM $tableName LIMIT 1');
     } catch (e) {
-      print('⚠️ Table $tableName does not exist, creating...');
+      //print('⚠️ Table $tableName does not exist, creating...');
 
       // Create the missing table based on table name
       if (tableName == 'kategoris_cache') {
@@ -194,7 +194,7 @@ class DBHelper {
           last_updated TEXT
         )
         ''');
-        print('✅ Table kategoris_cache created successfully');
+        //print('✅ Table kategoris_cache created successfully');
       } else if (tableName == 'pengeluaran_cache') {
         await database.execute('''
         CREATE TABLE IF NOT EXISTS pengeluaran_cache(
@@ -208,7 +208,7 @@ class DBHelper {
           last_updated TEXT
         )
         ''');
-        print('✅ Table pengeluaran_cache created successfully');
+        //print('✅ Table pengeluaran_cache created successfully');
       } else if (tableName == 'pengeluaran_offline') {
         await database.execute('''
         CREATE TABLE IF NOT EXISTS pengeluaran_offline(
@@ -221,7 +221,7 @@ class DBHelper {
           server_id INTEGER
         )
         ''');
-        print('✅ Table pengeluaran_offline created successfully');
+        //print('✅ Table pengeluaran_offline created successfully');
       }
     }
   }
@@ -243,7 +243,7 @@ class DBHelper {
     );
 
     if (existing.isNotEmpty) {
-      print('⚠️ Order with UUID $clientUuid already exists, skipping');
+      //print('⚠️ Order with UUID $clientUuid already exists, skipping');
       return;
     }
 
@@ -254,7 +254,7 @@ class DBHelper {
       'is_synced': 0,
     });
 
-    print('✅ Offline order saved with UUID: $clientUuid');
+    //print('✅ Offline order saved with UUID: $clientUuid');
   }
 
   static Future<List<Map<String, dynamic>>> getOfflineOrders() async {
@@ -285,7 +285,7 @@ class DBHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-    print('✅ Order $id marked as synced (server ID: $serverId)');
+    //print('✅ Order $id marked as synced (server ID: $serverId)');
   }
 
   static Future<void> markSyncError(int id, String error) async {
@@ -296,7 +296,7 @@ class DBHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-    print('❌ Sync error saved for order $id: $error');
+    //print('❌ Sync error saved for order $id: $error');
   }
 
   static Future<void> deleteOfflineOrder(int id) async {
@@ -314,7 +314,7 @@ class DBHelper {
       'orders_offline',
       where: 'is_synced = 1',
     );
-    print('🧹 Cleared synced orders');
+    //print('🧹 Cleared synced orders');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -336,7 +336,7 @@ class DBHelper {
     );
 
     if (existing.isNotEmpty) {
-      print('⚠️ Pengeluaran with UUID $clientUuid already exists, skipping');
+      //print('⚠️ Pengeluaran with UUID $clientUuid already exists, skipping');
       return;
     }
 
@@ -347,7 +347,7 @@ class DBHelper {
       'is_synced': 0,
     });
 
-    print('✅ Offline pengeluaran saved with UUID: $clientUuid');
+    //print('✅ Offline pengeluaran saved with UUID: $clientUuid');
   }
 
   static Future<List<Map<String, dynamic>>> getOfflinePengeluaran() async {
@@ -382,7 +382,7 @@ class DBHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-    print('✅ Pengeluaran $id marked as synced (server ID: $serverId)');
+    //print('✅ Pengeluaran $id marked as synced (server ID: $serverId)');
   }
 
   static Future<void> markPengeluaranSyncError(int id, String error) async {
@@ -393,7 +393,7 @@ class DBHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-    print('❌ Pengeluaran sync error saved for $id: $error');
+    //print('❌ Pengeluaran sync error saved for $id: $error');
   }
 
   static Future<void> clearSyncedPengeluaran() async {
@@ -404,7 +404,7 @@ class DBHelper {
       'pengeluaran_offline',
       where: 'is_synced = 1',
     );
-    print('🧹 Cleared synced pengeluaran');
+    //print('🧹 Cleared synced pengeluaran');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -437,7 +437,7 @@ class DBHelper {
     }
 
     await batch.commit(noResult: true);
-    print('✅ Cached ${pengeluaranList.length} pengeluaran');
+    //print('✅ Cached ${pengeluaranList.length} pengeluaran');
   }
 
   static Future<List<Map<String, dynamic>>> getPengeluaranFromCache() async {
@@ -456,7 +456,7 @@ class DBHelper {
           .rawQuery('SELECT COUNT(*) as count FROM pengeluaran_cache');
       return (result.first['count'] as int) > 0;
     } catch (e) {
-      print('❌ Error checking pengeluaran cache: $e');
+      //print('❌ Error checking pengeluaran cache: $e');
       return false;
     }
   }
@@ -506,7 +506,7 @@ class DBHelper {
     }
 
     await batch.commit(noResult: true);
-    print('✅ Cached ${products.length} products');
+    //print('✅ Cached ${products.length} products');
   }
 
   static Future<List<Map<String, dynamic>>> getProductsFromCache() async {
@@ -571,9 +571,9 @@ class DBHelper {
       }
 
       await batch.commit(noResult: true);
-      print('✅ Cached ${kategoris.length} kategoris');
+      //print('✅ Cached ${kategoris.length} kategoris');
     } catch (e) {
-      print('❌ Error saving kategoris to cache: $e');
+      //print('❌ Error saving kategoris to cache: $e');
     }
   }
 
@@ -586,7 +586,7 @@ class DBHelper {
           .rawQuery('SELECT COUNT(*) as count FROM kategoris_cache');
       return (result.first['count'] as int) > 0;
     } catch (e) {
-      print('❌ Error checking kategoris cache: $e');
+      //print('❌ Error checking kategoris cache: $e');
       return false;
     }
   }
@@ -598,7 +598,7 @@ class DBHelper {
 
       return await database.query('kategoris_cache');
     } catch (e) {
-      print('❌ Error getting kategoris from cache: $e');
+      //print('❌ Error getting kategoris from cache: $e');
       return [];
     }
   }
@@ -617,7 +617,7 @@ class DBHelper {
       if (result.isEmpty) return null;
       return DateTime.parse(result.first['last_updated'] as String);
     } catch (e) {
-      print('❌ Error getting kategoris cache timestamp: $e');
+      //print('❌ Error getting kategoris cache timestamp: $e');
       return null;
     }
   }
@@ -633,7 +633,7 @@ class DBHelper {
     await database.delete('pengeluaran_offline');
     await database.delete('pengeluaran_cache');
     await database.delete('kategoris_cache');
-    print('🧹 All cache cleared');
+    //print('🧹 All cache cleared');
   }
 
   // Force recreate all tables (use only for debugging)
@@ -642,10 +642,10 @@ class DBHelper {
       final dbPath = join(await getDatabasesPath(), 'orderkuy.db');
       await deleteDatabase(dbPath);
       _db = null;
-      print('🔄 Database reset successfully');
+      //print('🔄 Database reset successfully');
       await db; // Reinitialize
     } catch (e) {
-      print('❌ Error resetting database: $e');
+      //print('❌ Error resetting database: $e');
     }
   }
 }

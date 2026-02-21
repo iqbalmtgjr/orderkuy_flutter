@@ -57,7 +57,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     });
 
     try {
-      // Load summary (tapi jangan crash jika gagal)
       try {
         final summaryResponse = await ApiService.getRiwayatSummary(
           tanggalDari: _tanggalDari?.toIso8601String(),
@@ -71,10 +70,8 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
         }
       } catch (summaryError) {
         debugPrint('⚠️ Summary error (non-critical): $summaryError');
-        // Lanjutkan meskipun summary gagal
       }
 
-      // Load orders
       final response = await ApiService.getRiwayat(
         page: _currentPage,
         tanggalDari: _tanggalDari?.toIso8601String().split('T')[0],
@@ -206,13 +203,8 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  // Summary Card
                   if (_summary != null) _buildSummaryCard(),
-
-                  // Search Bar
                   _buildSearchBar(),
-
-                  // Order List
                   Expanded(
                     child: _orders.isEmpty
                         ? _buildEmptyState()
@@ -308,10 +300,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
               const SizedBox(width: 4),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],
           ),
@@ -329,10 +318,10 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     );
   }
 
+  // ✅ Search bar dengan tombol "Cari"
   Widget _buildSearchBar() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -343,14 +332,62 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
           ),
         ],
       ),
-      child: TextField(
-        controller: _searchController,
-        decoration: const InputDecoration(
-          hintText: 'Cari kode order atau nama customer...',
-          border: InputBorder.none,
-          icon: Icon(Icons.search),
-        ),
-        onSubmitted: (_) => _loadData(),
+      child: Row(
+        children: [
+          // Icon search di kiri
+          Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: Icon(Icons.search, color: Colors.grey.shade500, size: 20),
+          ),
+          // TextField mengisi sisa ruang
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _loadData(),
+              decoration: InputDecoration(
+                hintText: 'Cari kode order atau nama...',
+                hintStyle: TextStyle(
+                  color: Colors.grey.shade400,
+                  fontSize: 14,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 14,
+                ),
+              ),
+            ),
+          ),
+          // Tombol "Cari"
+          Padding(
+            padding: const EdgeInsets.all(6),
+            child: ElevatedButton(
+              onPressed: _loadData,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Cari',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -546,54 +583,49 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
               const SizedBox(height: 24),
               const Text(
                 'Item Pesanan',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              ...order.items.map((item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.menuNama,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
+              ...order.items.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.menuNama,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              '${item.qty}x ${_formatRupiah(item.harga)}',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 12,
                               ),
-                              Text(
-                                '${item.qty}x ${_formatRupiah(item.harga)}',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          _formatRupiah(item.subtotal),
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  )),
+                      ),
+                      Text(
+                        _formatRupiah(item.subtotal),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const Divider(height: 32),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'TOTAL',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     _formatRupiah(order.totalHarga),
@@ -618,14 +650,8 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(color: Colors.grey.shade600),
-          ),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
+          Text(label, style: TextStyle(color: Colors.grey.shade600)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
         ],
       ),
     );

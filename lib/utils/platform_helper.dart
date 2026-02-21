@@ -33,14 +33,14 @@ class PlatformHelper {
   static Future<void> printReceipt(String content) async {
     if (supportsThermalPrinter) {
       // Gunakan flutter_thermal_printer
-      // await ThermalPrinter.print(content);
-      print('📄 Printing via thermal printer: $content');
+      // await ThermalPrinter.//print(content);
+      //print('📄 Printing via thermal printer: $content');
     } else if (isWindows) {
       // Alternatif untuk Windows:
       // 1. Generate PDF dan print
       // 2. Kirim ke network printer
       // 3. Export ke file
-      print('📄 [Windows] Saving receipt to file: $content');
+      //print('📄 [Windows] Saving receipt to file: $content');
       // TODO: Implement Windows printing
     }
   }
@@ -48,7 +48,7 @@ class PlatformHelper {
   /// Get location (platform-specific)
   static Future<Map<String, double>?> getCurrentLocation() async {
     if (!supportsGeolocator) {
-      print('⚠️ Geolocation not supported on this platform');
+      //print('⚠️ Geolocation not supported on this platform');
       return null;
     }
 
@@ -61,7 +61,7 @@ class PlatformHelper {
         'longitude': position.longitude,
       };
     } catch (e) {
-      print('Error getting location: $e');
+      //print('Error getting location: $e');
       return null;
     }
     */
@@ -71,13 +71,13 @@ class PlatformHelper {
 
   /// Show platform info in debug
   static void printPlatformInfo() {
-    print('========== PLATFORM INFO ==========');
-    print('OS: ${Platform.operatingSystem}');
-    print('Version: ${Platform.operatingSystemVersion}');
-    print('Is Mobile: $isMobile');
-    print('Is Desktop: $isDesktop');
-    print('Thermal Printer: $supportsThermalPrinter');
-    print('Geolocator: $supportsGeolocator');
-    print('===================================');
+    //print('========== PLATFORM INFO ==========');
+    //print('OS: ${Platform.operatingSystem}');
+    //print('Version: ${Platform.operatingSystemVersion}');
+    //print('Is Mobile: $isMobile');
+    //print('Is Desktop: $isDesktop');
+    //print('Thermal Printer: $supportsThermalPrinter');
+    //print('Geolocator: $supportsGeolocator');
+    //print('===================================');
   }
 }
