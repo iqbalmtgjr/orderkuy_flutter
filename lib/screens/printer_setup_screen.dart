@@ -459,11 +459,11 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
                     color: Colors.black12,
                     blurRadius: 8,
-                    offset: const Offset(0, -2))
+                    offset: Offset(0, -2))
               ],
             ),
             child: Column(

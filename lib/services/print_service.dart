@@ -180,10 +180,11 @@ class ThermalPrintService {
     // Terlalu banyak error → paksa reconnect, reset counter
     if (errors >= _maxErrors) {
       force = true;
-      if (isKasir)
+      if (isKasir) {
         _kasirErrors = 0;
-      else
+      } else {
         _dapurErrors = 0;
+      }
     }
 
     // ─── FAST PATH: koneksi masih segar, skip reconnect ───────────────────
@@ -527,12 +528,14 @@ class ThermalPrintService {
     bytes += generator.emptyLines(1);
     bytes += generator.text(tokoNama,
         styles: const PosStyles(align: PosAlign.center, bold: true));
-    if (tokoAlamat != null && tokoAlamat.isNotEmpty)
+    if (tokoAlamat != null && tokoAlamat.isNotEmpty) {
       bytes += generator.text(tokoAlamat,
           styles: const PosStyles(align: PosAlign.center));
-    if (tokoTelepon != null && tokoTelepon.isNotEmpty)
+    }
+    if (tokoTelepon != null && tokoTelepon.isNotEmpty) {
       bytes += generator.text('Telp: $tokoTelepon',
           styles: const PosStyles(align: PosAlign.center));
+    }
     bytes += generator.text('================================',
         styles: const PosStyles(align: PosAlign.center));
 
@@ -556,7 +559,7 @@ class ThermalPrintService {
           width: 8,
           styles: const PosStyles(align: PosAlign.right)),
     ]);
-    if (kasirNama != null && kasirNama.isNotEmpty)
+    if (kasirNama != null && kasirNama.isNotEmpty) {
       bytes += generator.row([
         PosColumn(
             text: 'Kasir:',
@@ -567,6 +570,7 @@ class ThermalPrintService {
             width: 6,
             styles: const PosStyles(align: PosAlign.right)),
       ]);
+    }
     bytes += generator.row([
       PosColumn(
           text: 'Jenis:',
@@ -577,7 +581,7 @@ class ThermalPrintService {
           width: 6,
           styles: const PosStyles(align: PosAlign.right)),
     ]);
-    if (jenisOrder == 1 && mejaNo != null)
+    if (jenisOrder == 1 && mejaNo != null) {
       bytes += generator.row([
         PosColumn(
             text: 'Meja:',
@@ -588,6 +592,7 @@ class ThermalPrintService {
             width: 6,
             styles: const PosStyles(align: PosAlign.right)),
       ]);
+    }
 
     bytes += generator.text('--------------------------------',
         styles: const PosStyles(align: PosAlign.center));
@@ -738,7 +743,7 @@ class ThermalPrintService {
           width: 6,
           styles: const PosStyles(align: PosAlign.right, bold: true)),
     ]);
-    if (jenisOrder == 1 && mejaNo != null)
+    if (jenisOrder == 1 && mejaNo != null) {
       bytes += generator.row([
         PosColumn(
             text: 'MEJA:',
@@ -753,7 +758,8 @@ class ThermalPrintService {
                 height: PosTextSize.size2,
                 width: PosTextSize.size2)),
       ]);
-    if (kasirNama != null && kasirNama.isNotEmpty)
+    }
+    if (kasirNama != null && kasirNama.isNotEmpty) {
       bytes += generator.row([
         PosColumn(
             text: 'Kasir:',
@@ -764,6 +770,7 @@ class ThermalPrintService {
             width: 6,
             styles: const PosStyles(align: PosAlign.right)),
       ]);
+    }
 
     bytes += generator.text('================================',
         styles: const PosStyles(align: PosAlign.center));
@@ -870,10 +877,11 @@ class ThermalPrintService {
 
   static Future<bool> connectPrinter(Printer printer,
       {PrinterRole role = PrinterRole.kasir}) async {
-    if (role == PrinterRole.kasir)
+    if (role == PrinterRole.kasir) {
       _kasirPrinter = printer;
-    else
+    } else {
       _dapurPrinter = printer;
+    }
     return _smartConnect(role, force: true);
   }
 

@@ -27,13 +27,10 @@ class _PesananScreenState extends State<PesananScreen> {
 
   Future<void> _loadOrders() async {
     setState(() => _isLoading = true);
-
     final orders = await ApiService.getOrders(
       filterJenisOrder: _filterJenisOrder,
     );
-
     if (!mounted) return;
-
     setState(() {
       _orders = orders;
       _isLoading = false;
@@ -43,7 +40,6 @@ class _PesananScreenState extends State<PesananScreen> {
   Future<void> _refreshOrders() async {
     await SyncService.syncOrders();
     await _loadOrders();
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -59,21 +55,23 @@ class _PesananScreenState extends State<PesananScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Konfirmasi'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Konfirmasi',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         content: const Text('Yakin pesanan ini selesai?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            style: ElevatedButton.styleFrom(
-              foregroundColor: const Color.fromARGB(255, 180, 0, 0),
-            ),
-            child: const Text('Batal'),
+            child:
+                const Text('Batal', style: TextStyle(color: Color(0xFFD32F2F))),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('Ya, Selesai'),
           ),
@@ -113,13 +111,8 @@ class _PesananScreenState extends State<PesananScreen> {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // PRINT RECEIPT + DAPUR
-  // ═══════════════════════════════════════════════════════════
-
   Future<void> _printReceipt(Order order) async {
     try {
-      // Cek minimal printer kasir sudah dikonfigurasi
       final kasirPrinter = await ThermalPrintService.getSavedPrinter(
         role: PrinterRole.kasir,
       );
@@ -148,7 +141,6 @@ class _PesananScreenState extends State<PesananScreen> {
 
       if (!mounted) return;
 
-      // Loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -167,7 +159,6 @@ class _PesananScreenState extends State<PesananScreen> {
         ),
       );
 
-      // Cetak ke kasir + dapur sekaligus
       final results = await ThermalPrintService.printAll(
         orderId: order.id.toString(),
         tokoNama: order.tokoNama ?? 'OrderKuy',
@@ -184,7 +175,7 @@ class _PesananScreenState extends State<PesananScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // tutup loading
+      Navigator.pop(context);
 
       final kasirOk = results[0];
       final dapurOk = results[1];
@@ -216,7 +207,6 @@ class _PesananScreenState extends State<PesananScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route is! DialogRoute);
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error print: $e'),
@@ -231,124 +221,66 @@ class _PesananScreenState extends State<PesananScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Filter Jenis Pesanan'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Filter Jenis Pesanan',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              title: const Text('Semua'),
-              leading: Radio<String?>(
-                value: null,
-                groupValue: _filterJenisOrder,
-                onChanged: (value) {
-                  setState(() => _filterJenisOrder = value);
-                  Navigator.pop(context);
-                  _loadOrders();
-                },
-              ),
-            ),
-            ListTile(
-              title: const Text('Dine In'),
-              leading: Radio<String?>(
-                value: '1',
-                groupValue: _filterJenisOrder,
-                onChanged: (value) {
-                  setState(() => _filterJenisOrder = value);
-                  Navigator.pop(context);
-                  _loadOrders();
-                },
-              ),
-            ),
-            ListTile(
-              title: const Text('Take Away'),
-              leading: Radio<String?>(
-                value: '2',
-                groupValue: _filterJenisOrder,
-                onChanged: (value) {
-                  setState(() => _filterJenisOrder = value);
-                  Navigator.pop(context);
-                  _loadOrders();
-                },
-              ),
-            ),
+            _filterTile('Semua', null),
+            _filterTile('Dine In', '1'),
+            _filterTile('Take Away', '2'),
           ],
         ),
       ),
     );
   }
 
+  Widget _filterTile(String label, String? value) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(label),
+      leading: Radio<String?>(
+        value: value,
+        groupValue: _filterJenisOrder,
+        activeColor: const Color(0xFFD32F2F),
+        onChanged: (v) {
+          setState(() => _filterJenisOrder = v);
+          Navigator.pop(context);
+          _loadOrders();
+        },
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════
+
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth > 600;
-    final crossAxisCount = isTablet ? 3 : 2;
+    final sw = MediaQuery.of(context).size.width;
+    // Tablet: 2 kolom, mobile: 1 kolom (list)
+    final isTablet = sw > 600;
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-          tooltip: 'Kembali ke Dashboard',
-        ),
-        title: const Text('Data Pesanan',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        elevation: 10,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sync, color: Colors.white),
-            onPressed: _refreshOrders,
-            tooltip: 'Refresh & Sync',
-          ),
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.white),
-            onPressed: _showFilterDialog,
-            tooltip: 'Filter',
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: _buildAppBar(),
       body: Column(
         children: [
           const SyncStatusWidget(),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red[50]!, Colors.white],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _orders.isEmpty
-                      ? _buildEmptyState()
-                      : RefreshIndicator(
-                          onRefresh: _refreshOrders,
-                          child: GridView.builder(
-                            padding: const EdgeInsets.all(16),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              childAspectRatio: 1.2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                            ),
-                            itemCount: _orders.length,
-                            itemBuilder: (context, index) {
-                              return _buildOrderCard(_orders[index]);
-                            },
-                          ),
-                        ),
-            ),
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFFD32F2F)))
+                : _orders.isEmpty
+                    ? _buildEmptyState()
+                    : RefreshIndicator(
+                        color: const Color(0xFFD32F2F),
+                        onRefresh: _refreshOrders,
+                        child:
+                            isTablet ? _buildTabletGrid() : _buildMobileList(),
+                      ),
           ),
         ],
       ),
@@ -361,307 +293,139 @@ class _PesananScreenState extends State<PesananScreen> {
         },
         backgroundColor: const Color(0xFFD32F2F),
         foregroundColor: Colors.white,
-        elevation: 8,
+        elevation: 6,
         icon: const Icon(Icons.add),
-        label: const Text('Tambah Pesanan'),
+        label: const Text('Tambah Pesanan',
+            style: TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () => Navigator.pop(context),
+        tooltip: 'Kembali ke Dashboard',
+      ),
+      title: const Text(
+        'Data Pesanan',
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      ),
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      ),
+      elevation: 4,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.sync, color: Colors.white),
+          onPressed: _refreshOrders,
+          tooltip: 'Refresh & Sync',
+        ),
+        IconButton(
+          icon: const Icon(Icons.filter_list, color: Colors.white),
+          onPressed: _showFilterDialog,
+          tooltip: 'Filter',
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // MOBILE: ListView — tidak ada overflow
+  // ─────────────────────────────────────────────
+  Widget _buildMobileList() {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      itemCount: _orders.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) => _buildOrderCard(_orders[index]),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // TABLET: 2-kolom grid, pakai crossAxisExtent
+  // ─────────────────────────────────────────────
+  Widget _buildTabletGrid() {
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 400,
+        // Tidak pakai childAspectRatio — gunakan mainAxisExtent tetap
+        mainAxisExtent: 220,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: _orders.length,
+      itemBuilder: (context, index) => _buildOrderCard(_orders[index]),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // ORDER CARD — tinggi mengikuti konten (tidak pakai Expanded)
+  // ─────────────────────────────────────────────
+  Widget _buildOrderCard(Order order) {
+    final isDineIn = order.jenisOrder == 1;
+    final hasCatatan = order.catatan != null && order.catatan!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: () => _showOrderDetails(order),
       child: Container(
-        margin: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red.shade100, Colors.red.shade50],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.shade100.withValues(alpha: 0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Icon(Icons.restaurant_menu_outlined,
-                  size: 60, color: Colors.red.shade900),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Belum Ada Pesanan',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Pesanan yang dibuat hari ini akan muncul di sini',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 16, color: Colors.grey.shade600, height: 1.5),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildOrderCard(Order order) {
-    return GestureDetector(
-      onTap: () => _showOrderDetails(order),
-      child: Card(
-        elevation: 8,
-        shadowColor: Colors.red.withValues(alpha: 0.2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              colors: [Colors.white, Colors.red[50]!],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.red.shade900, Colors.red.shade700],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          order.jenisOrder == 1
-                              ? Icons.restaurant
-                              : Icons.shopping_bag,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          order.jenisOrder == 1
-                              ? 'Meja ${order.mejaNo ?? "-"}'
-                              : 'Take Away',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade600,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'PENDING',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.shopping_cart,
-                                size: 16, color: Colors.red.shade700),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${order.items.length} item${order.items.length > 1 ? 's' : ''}',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          'Rp ${order.totalHarga.toStringAsFixed(0)}',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade700),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (order.catatan != null && order.catatan!.isNotEmpty) ...[
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.yellow.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.yellow.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.note,
-                                size: 14, color: Colors.orange.shade700),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                order.catatan!,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700,
-                                    fontStyle: FontStyle.italic),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      KasirScreen(orderToEdit: order),
-                                ),
-                              ).then((_) => _loadOrders());
-                            },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.orange.shade700,
-                              side: BorderSide(color: Colors.orange.shade200),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            child: const Icon(Icons.edit, size: 18),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () => _selesaikanPesanan(order.id),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade600,
-                              foregroundColor: Colors.white,
-                              elevation: 2,
-                              shadowColor: Colors.green.withValues(alpha: 0.3),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            child: const Icon(Icons.check, size: 18),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showOrderDetails(Order order) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
         child: Column(
+          mainAxisSize: MainAxisSize.min, // ← ikuti konten
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Header merah ──
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red.shade900, Colors.red.shade700],
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFB71C1C), Color(0xFFD32F2F)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        order.jenisOrder == 1
-                            ? Icons.restaurant
-                            : Icons.shopping_bag,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        order.jenisOrder == 1
-                            ? 'Meja ${order.mejaNo ?? "-"}'
-                            : 'Take Away',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                  Icon(
+                    isDineIn ? Icons.restaurant : Icons.shopping_bag,
+                    color: Colors.white,
+                    size: 18,
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      isDineIn ? 'Meja ${order.mejaNo ?? "-"}' : 'Take Away',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  // Badge PENDING
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: Colors.orange.shade600,
                       borderRadius: BorderRadius.circular(20),
@@ -669,95 +433,387 @@ class _PesananScreenState extends State<PesananScreen> {
                     child: const Text(
                       'PENDING',
                       style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Detail Pesanan',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    ...order.items.map((item) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Colors.red.shade100,
-                                child: Text(
-                                  '${item.qty}x',
-                                  style: TextStyle(
-                                      color: Colors.red.shade900,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(item.menuNama,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w500)),
-                                    Text(
-                                      'Rp ${item.harga.toStringAsFixed(0)}',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                'Rp ${item.subtotal.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        )),
-                    const Divider(height: 32),
-                    if (order.catatan != null && order.catatan!.isNotEmpty) ...[
-                      const Row(
+
+            // ── Body ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Item count + Total
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         children: [
-                          Icon(Icons.note, size: 20, color: Colors.grey),
-                          SizedBox(width: 8),
-                          Text('Catatan:',
+                          Icon(Icons.shopping_cart_outlined,
+                              size: 15, color: Colors.red.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${order.items.length} item${order.items.length > 1 ? 's' : ''}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        _formatRupiah(order.totalHarga),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Catatan (opsional)
+                  if (hasCatatan) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.sticky_note_2_outlined,
+                              size: 14, color: Colors.orange.shade700),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              order.catatan!,
                               style: TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16)),
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 12),
+
+                  // Tombol aksi
+                  Row(
+                    children: [
+                      // Edit
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: order.id == 0
+                              ? null
+                              : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          KasirScreen(orderToEdit: order),
+                                    ),
+                                  ).then((_) => _loadOrders());
+                                },
+                          icon: Icon(Icons.edit_outlined,
+                              size: 16, color: Colors.orange.shade700),
+                          label: Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            side: BorderSide(color: Colors.orange.shade300),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Selesai
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              order.id == 0 // ← order offline, disable tombol
+                                  ? null
+                                  : () => _selesaikanPesanan(order.id),
+                          icon:
+                              const Icon(Icons.check_circle_outline, size: 16),
+                          label: const Text(
+                            'Selesai',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // EMPTY STATE
+  // ─────────────────────────────────────────────
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.receipt_long_outlined,
+                  size: 52, color: Colors.red.shade300),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Belum Ada Pesanan',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Pesanan yang dibuat hari ini\nakan muncul di sini',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // DETAIL BOTTOM SHEET
+  // ─────────────────────────────────────────────
+  void _showOrderDetails(Order order) {
+    final isDineIn = order.jenisOrder == 1;
+    final hasCatatan = order.catatan != null && order.catatan!.isNotEmpty;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.92,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 4),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Header
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFB71C1C), Color(0xFFD32F2F)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isDineIn ? Icons.restaurant : Icons.shopping_bag,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isDineIn ? 'Meja ${order.mejaNo ?? "-"}' : 'Take Away',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade600,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'PENDING',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Scrollable body
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    const Text(
+                      'Detail Pesanan',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Items
+                    ...order.items.map(
+                      (item) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: Colors.red.shade100,
+                              child: Text(
+                                '${item.qty}x',
+                                style: TextStyle(
+                                  color: Colors.red.shade900,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.menuNama,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14)),
+                                  Text(
+                                    _formatRupiah(item.harga),
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              _formatRupiah(item.subtotal),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const Divider(height: 28),
+
+                    // Catatan
+                    if (hasCatatan) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.sticky_note_2_outlined,
+                              size: 18, color: Colors.orange.shade600),
+                          const SizedBox(width: 8),
+                          const Text('Catatan:',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14)),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.yellow.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.yellow.shade200),
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.amber.shade200),
                         ),
                         child: Text(order.catatan!,
-                            style:
-                                const TextStyle(fontStyle: FontStyle.italic)),
+                            style: const TextStyle(
+                                fontStyle: FontStyle.italic, fontSize: 14)),
                       ),
                       const SizedBox(height: 16),
                     ],
+
+                    // Total
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -768,84 +824,116 @@ class _PesananScreenState extends State<PesananScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Total Pembayaran:',
+                          const Text('Total:',
                               style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
                           Text(
-                            'Rp ${order.totalHarga.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green),
+                            _formatRupiah(order.totalHarga),
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade700,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
+
+                    const SizedBox(height: 20),
+
+                    // Tombol aksi
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      KasirScreen(orderToEdit: order),
-                                ),
-                              ).then((_) => _loadOrders());
-                            },
-                            icon: const Icon(Icons.edit),
+                            onPressed:
+                                order.id == 0 // ← order offline, disable tombol
+                                    ? null
+                                    : () {
+                                        Navigator.pop(context);
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                KasirScreen(orderToEdit: order),
+                                          ),
+                                        ).then((_) => _loadOrders());
+                                      },
+                            icon: const Icon(Icons.edit_outlined, size: 16),
                             label: const Text('Edit'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.orange.shade700,
-                              side: BorderSide(color: Colors.orange.shade200),
+                              side: BorderSide(color: Colors.orange.shade300),
                               padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _printReceipt(order);
-                            },
-                            icon: const Icon(Icons.print),
+                            onPressed:
+                                order.id == 0 // ← order offline, disable tombol
+                                    ? null
+                                    : () {
+                                        Navigator.pop(context);
+                                        _printReceipt(order);
+                                      },
+                            icon: const Icon(Icons.print_outlined, size: 16),
                             label: const Text('Print'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.blue.shade700,
-                              side: BorderSide(color: Colors.blue.shade200),
+                              side: BorderSide(color: Colors.blue.shade300),
                               padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _selesaikanPesanan(order.id);
-                            },
-                            icon: const Icon(Icons.check),
+                            onPressed:
+                                order.id == 0 // ← order offline, disable tombol
+                                    ? null
+                                    : () {
+                                        Navigator.pop(context);
+                                        _selesaikanPesanan(order.id);
+                                      },
+                            icon: const Icon(Icons.check_circle_outline,
+                                size: 16),
                             label: const Text('Selesai'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green.shade600,
                               foregroundColor: Colors.white,
+                              elevation: 0,
                               padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
                         ),
                       ],
                     ),
+
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // ─────────────────────────────────────────────
+  String _formatRupiah(double amount) {
+    final formatted = amount.toStringAsFixed(0);
+    return 'Rp ${formatted.replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]}.',
+    )}';
   }
 }

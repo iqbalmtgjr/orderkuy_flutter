@@ -11,6 +11,7 @@ import '../models/order.dart';
 import '../utils/constants.dart';
 import 'printer_setup_screen.dart';
 import '../widgets/sync_status_widget.dart';
+import '../core/database/db_helper.dart';
 
 class _RupiahInputFormatter extends TextInputFormatter {
   @override
@@ -70,6 +71,7 @@ class _KasirScreenState extends State<KasirScreen>
   final List<Map<String, dynamic>> _selectedItems = [];
   bool _isLoading = true;
   bool _isOnline = true;
+  bool _isBackgroundLoading = false;
 
   // Form fields
   int _jenisOrder = Constants.jenisOrderDineIn;
@@ -233,34 +235,156 @@ class _KasirScreenState extends State<KasirScreen>
     });
   }
 
+  // Update method dengan indicator
+  Future<void> _loadDataWithIndicator() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final products = await ApiService.getMenusOfflineFirst(
+        onDataUpdated: (freshProducts) {
+          if (mounted) {
+            setState(() {
+              _products = freshProducts;
+              _applyFilters();
+              _isBackgroundLoading = false; // ← Hide indicator
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text('Menu diperbarui dari server'),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+      );
+
+      final kategoris = await ApiService.getKategoris();
+      final mejas = widget.orderToEdit != null
+          ? await ApiService.getAllTables()
+          : await ApiService.getFreeTables();
+
+      setState(() {
+        _products = products;
+        _kategoris = kategoris;
+        _filteredProducts = products;
+        _mejas = mejas;
+        _isLoading = false;
+        _isBackgroundLoading = true; // ← Show indicator saat fetch background
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final products = await ApiService.getMenus();
-    final kategoris = await ApiService.getKategoris();
-    final mejas = widget.orderToEdit != null
-        ? await ApiService.getAllTables()
-        : await ApiService.getFreeTables();
-    setState(() {
-      _products = products;
-      _kategoris = kategoris;
-      _filteredProducts = products;
-      _mejas = mejas;
-      _isLoading = false;
-    });
-    if (widget.orderToEdit != null && _selectedMejaId != null) {
-      final isMejaAvailable = _mejas.any((meja) => meja.id == _selectedMejaId);
-      if (!isMejaAvailable) {
-        setState(() => _selectedMejaId = null);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Meja yang dipilih tidak tersedia, silakan pilih meja lain'),
-              backgroundColor: Colors.orange,
+
+    debugPrint('🔄 Loading data (Offline-First Strategy)...');
+
+    try {
+      // Load products with offline-first strategy
+      final products = await ApiService.getMenusOfflineFirst(
+        onDataUpdated: (freshProducts) {
+          // Callback: dipanggil saat data baru dari server ready
+          if (mounted) {
+            setState(() {
+              _products = freshProducts;
+              _applyFilters();
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Data menu diperbarui dari server'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+      );
+
+      // ← CRITICAL FIX: Gunakan getKategorisOfflineFirst()
+      final kategoris = await ApiService.getKategorisOfflineFirst(
+        onDataUpdated: (freshKategoris) {
+          // Callback: update kategoris saat data baru ready
+          if (mounted) {
+            setState(() {
+              _kategoris = freshKategoris;
+            });
+            debugPrint('✅ Kategoris updated from background fetch');
+          }
+        },
+      );
+
+      // Load mejas (online only, no cache needed)
+      final mejas = widget.orderToEdit != null
+          ? await ApiService.getAllTables()
+          : await ApiService.getFreeTables();
+
+      setState(() {
+        _products = products;
+        _kategoris = kategoris;
+        _filteredProducts = products;
+        _mejas = mejas;
+        _isLoading = false;
+      });
+
+      debugPrint(
+          '✅ Initial data loaded: ${products.length} products, ${kategoris.length} kategoris');
+    } catch (e) {
+      debugPrint('❌ Error loading data: $e');
+      setState(() => _isLoading = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error memuat data: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Coba Lagi',
+              textColor: Colors.white,
+              onPressed: _loadData,
             ),
-          );
-        }
+          ),
+        );
       }
+    }
+  }
+
+  Future<void> _forceRefreshData() async {
+    if (!_isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak bisa refresh saat offline'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    // Clear cache first
+    await DBHelper.clearAllCache();
+
+    // Reload data
+    await _loadData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Data berhasil di-refresh'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -769,10 +893,27 @@ class _KasirScreenState extends State<KasirScreen>
               }
             },
           ),
-          title: Text(
-            isEditing ? 'Edit Pesanan' : 'Kasir',
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold),
+          title: Row(
+            children: [
+              Text(
+                isEditing ? 'Edit Pesanan' : 'Kasir',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (_isBackgroundLoading) ...[
+                const SizedBox(width: 12),
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              ],
+            ],
           ),
           flexibleSpace: Container(
             decoration: const BoxDecoration(
@@ -786,6 +927,12 @@ class _KasirScreenState extends State<KasirScreen>
           elevation: 10,
           shadowColor: Colors.red.withValues(alpha: 0.5),
           actions: [
+            if (_isOnline)
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.white),
+                onPressed: _forceRefreshData,
+                tooltip: 'Refresh Data',
+              ),
             IconButton(
               icon: const Icon(Icons.print, color: Colors.white),
               onPressed: () => Navigator.push(
@@ -1674,7 +1821,7 @@ class _KasirScreenState extends State<KasirScreen>
         const Text('Pilih Meja', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          value: _selectedMejaId,
+          initialValue: _selectedMejaId,
           decoration: InputDecoration(
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             contentPadding:

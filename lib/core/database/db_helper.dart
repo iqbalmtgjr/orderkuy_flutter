@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -10,7 +11,7 @@ class DBHelper {
 
     _db = await openDatabase(
       join(await getDatabasesPath(), 'orderkuy.db'),
-      version: 5, // ← INCREMENT version untuk kategoris cache
+      version: 6, // ← INCREMENT version untuk kategoris cache
       onCreate: (db, v) async {
         await _createTables(db);
       },
@@ -24,6 +25,7 @@ class DBHelper {
             qty INTEGER,
             foto TEXT,
             kategori TEXT,
+            kategori_id INTEGER,
             toko_id INTEGER,
             last_updated TEXT
           )
@@ -99,6 +101,15 @@ class DBHelper {
           )
           ''');
         }
+
+        if (oldVersion < 6) {
+          try {
+            await db.execute(
+                'ALTER TABLE products_cache ADD COLUMN kategori_id INTEGER');
+          } catch (e) {
+            debugPrint('Column kategori_id already exists: $e');
+          }
+        }
       },
     );
     return _db!;
@@ -127,6 +138,7 @@ class DBHelper {
       qty INTEGER,
       foto TEXT,
       kategori TEXT,
+      kategori_id INTEGER,
       toko_id INTEGER,
       last_updated TEXT
     )
@@ -226,6 +238,34 @@ class DBHelper {
     }
   }
 
+  static Future<void> saveProductsToCache(
+    List<Map<String, dynamic>> products,
+  ) async {
+    final database = await db;
+
+    // ← TAMBAHKAN INI
+    await _ensureKategoriIdColumn();
+
+    final batch = database.batch();
+    batch.delete('products_cache');
+
+    for (final product in products) {
+      batch.insert('products_cache', {
+        'id': product['id'],
+        'nama_produk': product['nama_produk'],
+        'harga': product['harga'],
+        'qty': product['qty'],
+        'foto': product['foto'],
+        'kategori': product['kategori'],
+        'kategori_id': product['kategori_id'], // ← sudah aman sekarang
+        'toko_id': product['toko_id'],
+        'last_updated': DateTime.now().toIso8601String(),
+      });
+    }
+
+    await batch.commit(noResult: true);
+    debugPrint('✅ Cached ${products.length} products');
+  }
   // ═══════════════════════════════════════════════════════════
   // OFFLINE ORDERS (existing code - no changes)
   // ═══════════════════════════════════════════════════════════
@@ -484,38 +524,41 @@ class DBHelper {
   // PRODUCT CACHE
   // ═══════════════════════════════════════════════════════════
 
-  static Future<void> saveProductsToCache(
-    List<Map<String, dynamic>> products,
-  ) async {
-    final database = await db;
-    final batch = database.batch();
+  // static Future<void> saveProductsToCache(
+  //   List<Map<String, dynamic>> products,
+  // ) async {
+  //   final database = await db;
+  //   final batch = database.batch();
 
-    batch.delete('products_cache');
+  //   batch.delete('products_cache');
 
-    for (final product in products) {
-      batch.insert('products_cache', {
-        'id': product['id'],
-        'nama_produk': product['nama_produk'],
-        'harga': product['harga'],
-        'qty': product['qty'],
-        'foto': product['foto'],
-        'kategori': product['kategori'],
-        'toko_id': product['toko_id'],
-        'last_updated': DateTime.now().toIso8601String(),
-      });
-    }
+  //   for (final product in products) {
+  //     batch.insert('products_cache', {
+  //       'id': product['id'],
+  //       'nama_produk': product['nama_produk'],
+  //       'harga': product['harga'],
+  //       'qty': product['qty'],
+  //       'foto': product['foto'],
+  //       'kategori': product['kategori'],
+  //       'kategori_id': product['kategori_id'],
+  //       'toko_id': product['toko_id'],
+  //       'last_updated': DateTime.now().toIso8601String(),
+  //     });
+  //   }
 
-    await batch.commit(noResult: true);
-    //print('✅ Cached ${products.length} products');
-  }
+  //   await batch.commit(noResult: true);
+  //   //print('✅ Cached ${products.length} products');
+  // }
 
   static Future<List<Map<String, dynamic>>> getProductsFromCache() async {
     final database = await db;
+    await _ensureKategoriIdColumn(); // ← TAMBAHKAN
     return await database.query('products_cache');
   }
 
   static Future<bool> hasProductsCache() async {
     final database = await db;
+    await _ensureKategoriIdColumn();
     final result =
         await database.rawQuery('SELECT COUNT(*) as count FROM products_cache');
     return (result.first['count'] as int) > 0;
@@ -646,6 +689,21 @@ class DBHelper {
       await db; // Reinitialize
     } catch (e) {
       //print('❌ Error resetting database: $e');
+    }
+  }
+
+  // Tambahkan method ini di DBHelper class
+  static Future<void> _ensureKategoriIdColumn() async {
+    final database = await db;
+    try {
+      // Coba query kolom — kalau error berarti belum ada
+      await database.rawQuery('SELECT kategori_id FROM products_cache LIMIT 1');
+    } catch (e) {
+      // Kolom belum ada, tambahkan
+      debugPrint('⚠️ Adding kategori_id column to products_cache...');
+      await database
+          .execute('ALTER TABLE products_cache ADD COLUMN kategori_id INTEGER');
+      debugPrint('✅ kategori_id column added');
     }
   }
 }

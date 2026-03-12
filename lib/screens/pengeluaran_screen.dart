@@ -347,7 +347,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                       top: 0,
                       child: Container(
                         padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: Colors.red,
                           shape: BoxShape.circle,
                         ),

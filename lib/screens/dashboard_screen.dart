@@ -11,8 +11,6 @@ import 'absensi_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RESPONSIVE HELPER
-// Semua ukuran dihitung relatif terhadap lebar layar,
-// sehingga tampilan konsisten di hp kecil (320px) maupun tablet (768px+).
 // ─────────────────────────────────────────────────────────────────────────────
 class _R {
   final double sw; // screen width
@@ -21,45 +19,86 @@ class _R {
   const _R(this.sw, this.sh);
 
   // ── Breakpoints ──
-  bool get isPhone => sw < 480;
-  bool get isTablet => sw >= 480 && sw < 768;
-  bool get isDesktop => sw >= 768;
+  // Tablet landscape biasanya sw >= 768 dan sw/sh > 1.2
+  bool get isPhone => sw < 600;
+  bool get isTabletPortrait => sw >= 600 && sw < 900;
+  bool get isTabletLandscape => sw >= 900;
+  bool get isLandscape => sw > sh;
+
+  // ── Basis ukuran yang adaptif ──
+  // Di tablet landscape, kita pakai sh (tinggi layar) sebagai basis agar
+  // elemen tidak terlalu besar
+  double get _base => isTabletLandscape ? sh * 0.9 : sw;
 
   // ── Spacing ──
-  double get pagePadH => sw * 0.044; // ~16 pada 360px, ~20 pada 450px
+  double get pagePadH => _base * 0.044;
   double get pagePadV => sh * 0.018;
-  double get cardRadius => sw * 0.056; // ~20 pada 360px
+  double get cardRadius => _base * 0.056;
   double get sectionGap => sh * 0.022;
 
-  // ── Lebar konten header dibatasi agar tidak melar di tablet/desktop ──
-  // Konten header di-center dengan maxWidth ini
-  double get headerContentMaxW => 520.0;
+  // ── Max width untuk layout 2-kolom di tablet landscape ──
+  double get contentMaxW => isTabletLandscape ? sw * 0.92 : sw;
+  // Header content dibatasi agar tidak terlalu lebar
+  double get headerContentMaxW => isTabletLandscape ? 680.0 : 520.0;
 
-  // ── Typography — clamp lebih ketat di tablet ──
-  double get fontXs => (sw * 0.028).clamp(10, 12); // 10–12
-  double get fontSm => (sw * 0.030).clamp(11, 13); // 11–13
-  double get fontMd => (sw * 0.034).clamp(13, 15); // 13–15
-  double get fontLg => (sw * 0.044).clamp(15, 19); // 15–19
-  double get fontXl => (sw * 0.065).clamp(22, 30); // 22–30 (nominal saldo)
-  double get fontTitle => (sw * 0.052).clamp(17, 22); // 17–22 (nama toko)
+  // ── Typography — lebih kecil di tablet landscape ──
+  double get fontXs => isTabletLandscape
+      ? (_base * 0.026).clamp(10, 12)
+      : (_base * 0.028).clamp(10, 13);
+  double get fontSm => isTabletLandscape
+      ? (_base * 0.028).clamp(11, 13)
+      : (_base * 0.030).clamp(11, 14);
+  double get fontMd => isTabletLandscape
+      ? (_base * 0.032).clamp(12, 14)
+      : (_base * 0.034).clamp(13, 15);
+  double get fontLg => isTabletLandscape
+      ? (_base * 0.040).clamp(14, 17)
+      : (_base * 0.044).clamp(15, 19);
+  double get fontXl => isTabletLandscape
+      ? (_base * 0.055).clamp(18, 26)
+      : (_base * 0.065).clamp(22, 30);
+  double get fontTitle => isTabletLandscape
+      ? (_base * 0.044).clamp(15, 20)
+      : (_base * 0.052).clamp(17, 22);
 
   // ── Icon ──
-  double get iconSm => (sw * 0.030).clamp(12, 15);
-  double get iconMd => (sw * 0.048).clamp(17, 22);
-  double get iconLg => (sw * 0.060).clamp(20, 26);
+  double get iconSm => isTabletLandscape
+      ? (_base * 0.028).clamp(11, 14)
+      : (_base * 0.030).clamp(12, 15);
+  double get iconMd => isTabletLandscape
+      ? (_base * 0.042).clamp(15, 20)
+      : (_base * 0.048).clamp(17, 22);
+  double get iconLg => isTabletLandscape
+      ? (_base * 0.052).clamp(18, 24)
+      : (_base * 0.060).clamp(20, 26);
 
   // ── Avatar / Menu Icon ──
-  double get avatarSize => (sw * 0.100).clamp(36, 46);
-  double get menuIconBox => (sw * 0.130).clamp(44, 58);
-  double get menuIconSize => (sw * 0.058).clamp(19, 25);
+  double get avatarSize => isTabletLandscape
+      ? (_base * 0.085).clamp(32, 42)
+      : (_base * 0.100).clamp(36, 46);
+  double get menuIconBox => isTabletLandscape
+      ? (_base * 0.110).clamp(40, 52)
+      : (_base * 0.130).clamp(44, 58);
+  double get menuIconSize => isTabletLandscape
+      ? (_base * 0.050).clamp(17, 22)
+      : (_base * 0.058).clamp(19, 25);
 
   // ── Card ──
-  double get cardPad => sw * 0.05;
-  double get saldoCardMarginH => sw * 0.04;
+  double get cardPad => _base * 0.05;
+  double get saldoCardMarginH => _base * 0.04;
 
   // ── Grid ──
-  int get menuCrossAxis => isDesktop ? 6 : (isTablet ? 5 : 4);
-  double get menuAspect => isDesktop ? 0.85 : (isTablet ? 0.82 : 0.78);
+  // Di tablet landscape, menu bisa 2 baris 3 kolom atau 1 baris 5 kolom
+  int get menuCrossAxis => isTabletLandscape ? 5 : (isTabletPortrait ? 5 : 4);
+  double get menuAspect =>
+      isTabletLandscape ? 0.90 : (isTabletPortrait ? 0.85 : 0.78);
+
+  // ── Layout helper ──
+  // Apakah gunakan layout 2 kolom (header kiri, summary kanan) di tablet landscape
+  bool get useTwoColumnLayout => isTabletLandscape;
+
+  // Padding vertikal header lebih kecil di landscape
+  double get headerPadV => isTabletLandscape ? sh * 0.012 : sh * 0.018;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,50 +280,360 @@ class _DashboardScreenState extends State<DashboardScreen>
             )
           : FadeTransition(
               opacity: _fadeAnimation ?? const AlwaysStoppedAnimation(1.0),
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildHeaderWithCard(r)),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                          r.pagePadH, r.sectionGap, r.pagePadH, 0),
-                      child: _buildMenuSection(r),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                          r.pagePadH, r.sectionGap * 0.8, r.pagePadH, 0),
-                      child: _buildTransactionSummary(r),
-                    ),
-                  ),
-                  SliverToBoxAdapter(child: SizedBox(height: r.sectionGap * 2)),
-                ],
-              ),
+              child: r.useTwoColumnLayout
+                  ? _buildTabletLandscapeLayout(r)
+                  : _buildMobileLayout(r),
             ),
     );
   }
 
   // ═══════════════════════════════════════════════════════════
-  // HEADER + SALDO CARD
+  // LAYOUT: MOBILE / TABLET PORTRAIT
+  // ═══════════════════════════════════════════════════════════
+  Widget _buildMobileLayout(_R r) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildHeaderWithCard(r)),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding:
+                EdgeInsets.fromLTRB(r.pagePadH, r.sectionGap, r.pagePadH, 0),
+            child: _buildMenuSection(r),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+                r.pagePadH, r.sectionGap * 0.8, r.pagePadH, 0),
+            child: _buildTransactionSummary(r),
+          ),
+        ),
+        SliverToBoxAdapter(child: SizedBox(height: r.sectionGap * 2)),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LAYOUT: TABLET LANDSCAPE — 2 KOLOM
+  // Kiri: Header + Menu  |  Kanan: Saldo Card + Ringkasan
+  // ═══════════════════════════════════════════════════════════
+  Widget _buildTabletLandscapeLayout(_R r) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Kolom Kiri: Header gradient + Menu ──
+        SizedBox(
+          width: r.sw * 0.42,
+          child: _buildLeftColumnTablet(r),
+        ),
+
+        // ── Kolom Kanan: Saldo + Ringkasan ──
+        Expanded(
+          child: Container(
+            color: const Color(0xFFF2F3F7),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(r.pagePadH),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: r.sh * 0.04),
+                  _buildSaldoCard(r),
+                  SizedBox(height: r.sectionGap),
+                  _buildTransactionSummary(r),
+                  SizedBox(height: r.sectionGap),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLeftColumnTablet(_R r) {
+    final hour = DateTime.now().hour;
+    String greeting = 'Selamat Pagi';
+    if (hour >= 12 && hour < 15) {
+      greeting = 'Selamat Siang';
+    } else if (hour >= 15 && hour < 18) {
+      greeting = 'Selamat Sore';
+    } else if (hour >= 18) {
+      greeting = 'Selamat Malam';
+    }
+
+    return Stack(
+      children: [
+        // Gradient background full height
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFFC62828),
+                  Color(0xFFE53935),
+                  Color(0xFFEF5350)
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [0.0, 0.5, 1.0],
+              ),
+            ),
+          ),
+        ),
+
+        // Dekorasi lingkaran
+        Positioned(
+          top: -r.sw * 0.07,
+          right: -r.sw * 0.07,
+          child: _decorCircle(r.sw * 0.28, 0.05),
+        ),
+        Positioned(
+          top: r.sw * 0.12,
+          right: r.sw * 0.06,
+          child: _decorCircle(r.sw * 0.13, 0.06),
+        ),
+        Positioned(
+          bottom: r.sh * 0.15,
+          left: -r.sw * 0.04,
+          child: _decorCircle(r.sw * 0.16, 0.04),
+        ),
+
+        // Konten
+        SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+                horizontal: r.pagePadH, vertical: r.headerPadV),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Logo + OrderKuy! (referensi dari login screen) ──
+                Center(
+                  child: Column(
+                    children: [
+                      Container(
+                        width: r.sh * 0.08,
+                        height: r.sh * 0.08,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(r.sh * 0.02),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF8B0000).withOpacity(0.5),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(r.sh * 0.02),
+                          child: Image.network(
+                            'https://orderkuy.indotechconsulting.com/assets/img/logo.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Icon(
+                                Icons.restaurant_menu_rounded,
+                                size: r.sh * 0.045,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: r.headerPadV * 0.7),
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Color(0xFFFFFFFF), Color(0xFFFFCDD2)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ).createShader(bounds),
+                        child: Text(
+                          'OrderKuy!',
+                          style: TextStyle(
+                            fontSize: r.fontTitle * 1.15,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -0.8,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: r.headerPadV * 0.3),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: r.pagePadH * 0.7,
+                            vertical: r.headerPadV * 0.2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(r.sw * 0.05),
+                          border:
+                              Border.all(color: Colors.white.withOpacity(0.18)),
+                        ),
+                        child: Text(
+                          'Sistem Kasir Digital',
+                          style: TextStyle(
+                            fontSize: r.fontXs * 0.95,
+                            color: Colors.white.withOpacity(0.6),
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: r.headerPadV * 1.4),
+                Divider(color: Colors.white.withOpacity(0.15), height: 1),
+                SizedBox(height: r.headerPadV * 1.2),
+
+                // ── User info bar ──
+                Row(
+                  children: [
+                    _buildAvatar(r),
+                    SizedBox(width: r.pagePadH * 0.6),
+                    Expanded(child: _buildGreeting(r, greeting)),
+                    _buildLogoutBtn(r),
+                  ],
+                ),
+
+                SizedBox(height: r.headerPadV * 0.8),
+
+                // Nama toko + role
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _tokoNama,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: r.fontTitle,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(width: r.pagePadH * 0.5),
+                    _buildRoleBadge(r),
+                  ],
+                ),
+
+                SizedBox(height: r.headerPadV * 1.4),
+
+                // Divider tipis
+                Divider(
+                  color: Colors.white.withOpacity(0.2),
+                  height: 1,
+                ),
+
+                SizedBox(height: r.headerPadV * 1.2),
+
+                // Label menu
+                Text(
+                  'Menu',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: r.fontXs,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+
+                SizedBox(height: r.headerPadV * 0.8),
+
+                // Menu list (vertikal di tablet landscape)
+                _buildMenuListTablet(r),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Menu vertikal di kolom kiri tablet landscape
+  Widget _buildMenuListTablet(_R r) {
+    final menus = _getMenuData();
+
+    return Column(
+      children: menus.map((menu) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: r.sh * 0.012),
+          child: _buildMenuListItem(r, menu),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildMenuListItem(_R r, _MenuData menu) {
+    return GestureDetector(
+      onTap: menu.onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: r.pagePadH * 0.8, vertical: r.sh * 0.013),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(r.cardRadius * 0.7),
+          border: Border.all(color: Colors.white.withOpacity(0.18)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: r.menuIconBox * 0.7,
+              height: r.menuIconBox * 0.7,
+              decoration: BoxDecoration(
+                color: menu.bgColor.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(r.sw * 0.022),
+              ),
+              child: Icon(menu.icon,
+                  color: menu.color, size: r.menuIconSize * 0.85),
+            ),
+            SizedBox(width: r.pagePadH * 0.7),
+            Text(
+              menu.label,
+              style: TextStyle(
+                fontSize: r.fontSm,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                letterSpacing: -0.1,
+              ),
+            ),
+            const Spacer(),
+            Icon(Icons.chevron_right_rounded,
+                color: Colors.white.withOpacity(0.5), size: r.iconSm),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // HEADER + SALDO CARD (Mobile)
   // ═══════════════════════════════════════════════════════════
 
   Widget _buildHeaderWithCard(_R r) {
     final hour = DateTime.now().hour;
     String greeting = 'Selamat Pagi';
-    if (hour >= 12 && hour < 15)
+    if (hour >= 12 && hour < 15) {
       greeting = 'Selamat Siang';
-    else if (hour >= 15 && hour < 18)
+    } else if (hour >= 15 && hour < 18) {
       greeting = 'Selamat Sore';
-    else if (hour >= 18) greeting = 'Selamat Malam';
+    } else if (hour >= 18) {
+      greeting = 'Selamat Malam';
+    }
 
-    // Tinggi lengkungan di bawah header — lebih besar = lebih cembung
-    final curveHeight = r.sw * 0.09;
+    double curveHeight = r.isPhone ? r.sw * 0.09 : 40;
 
     return ClipPath(
       clipper: _BottomWaveClipper(curveHeight),
       child: Container(
-        // Tambah padding bawah ekstra agar konten tidak terpotong clipper
         padding: EdgeInsets.only(bottom: curveHeight),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -297,7 +646,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
-            // ── Dekorasi Lingkaran ──
             Positioned(
               top: -r.sw * 0.14,
               right: -r.sw * 0.14,
@@ -313,17 +661,14 @@ class _DashboardScreenState extends State<DashboardScreen>
               left: -r.sw * 0.08,
               child: _decorCircle(r.sw * 0.28, 0.04),
             ),
-
             SafeArea(
               bottom: false,
               child: Center(
                 child: ConstrainedBox(
-                  // Batasi lebar konten header — tidak melar di tablet
                   constraints: BoxConstraints(maxWidth: r.headerContentMaxW),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── Top Bar ──
                       Padding(
                         padding: EdgeInsets.fromLTRB(
                             r.pagePadH, r.pagePadV, r.pagePadH, 0),
@@ -336,10 +681,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ],
                         ),
                       ),
-
                       SizedBox(height: r.pagePadV * 0.9),
-
-                      // ── Nama Toko + Role ──
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: r.pagePadH),
                         child: Row(
@@ -363,16 +705,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ],
                         ),
                       ),
-
                       SizedBox(height: r.pagePadV * 1.1),
-
-                      // ── Saldo Card ──
                       Padding(
                         padding: EdgeInsets.symmetric(
                             horizontal: r.saldoCardMarginH),
                         child: _buildSaldoCard(r),
                       ),
-
                       SizedBox(height: r.pagePadV * 1.2),
                     ],
                   ),
@@ -497,7 +835,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Label + Refresh
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -536,10 +873,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ],
           ),
-
           SizedBox(height: r.pagePadV * 0.55),
-
-          // Nominal + Toggle
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -580,12 +914,9 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ],
           ),
-
           SizedBox(height: r.pagePadV * 0.88),
           Divider(color: Colors.grey.shade100, height: 1),
           SizedBox(height: r.pagePadV * 0.77),
-
-          // Stats: Cash | Transfer | Keluar
           Row(
             children: [
               _buildInlineStat(
@@ -669,11 +1000,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   // ═══════════════════════════════════════════════════════════
-  // MENU SECTION
+  // MENU SECTION (Mobile/Tablet Portrait)
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildMenuSection(_R r) {
-    final menus = [
+  List<_MenuData> _getMenuData() {
+    return [
       _MenuData(
         icon: Icons.point_of_sale_rounded,
         label: 'Kasir',
@@ -715,7 +1046,10 @@ class _DashboardScreenState extends State<DashboardScreen>
             MaterialPageRoute(builder: (_) => const PrinterSetupScreen())),
       ),
     ];
+  }
 
+  Widget _buildMenuSection(_R r) {
+    final menus = _getMenuData();
     return _buildCard(
       r: r,
       child: Column(
@@ -795,7 +1129,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -826,10 +1159,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ],
           ),
-
           SizedBox(height: r.pagePadV * 0.88),
-
-          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(r.sw * 0.022),
             child: Row(
@@ -847,10 +1177,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ],
             ),
           ),
-
           SizedBox(height: r.sw * 0.018),
-
-          // Legend
           Row(
             children: [
               _buildLegendDot(r, const Color(0xFF2E7D32), 'Cash'),
@@ -858,10 +1185,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               _buildLegendDot(r, const Color(0xFF1565C0), 'Transfer'),
             ],
           ),
-
           SizedBox(height: r.pagePadV * 0.88),
-
-          // Dua kartu
           Row(
             children: [
               _buildSummaryItem(
@@ -1035,8 +1359,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 }
 
 // ─────────────────────────────────────────────
-// Custom clipper: bagian bawah header melengkung ke bawah (concave wave)
-// seperti Wondr BNI — elegant dan memberi kedalaman visual.
+// Custom clipper
 // ─────────────────────────────────────────────
 class _BottomWaveClipper extends CustomClipper<Path> {
   final double curveHeight;
@@ -1046,7 +1369,6 @@ class _BottomWaveClipper extends CustomClipper<Path> {
   Path getClip(Size size) {
     final path = Path();
     path.lineTo(0, size.height - curveHeight);
-    // Lengkungan quadratic — titik kontrol di tengah bawah
     path.quadraticBezierTo(
       size.width / 2,
       size.height + curveHeight,

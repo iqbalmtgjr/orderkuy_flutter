@@ -64,6 +64,16 @@ void main() async {
     debugPrint('⚠️ Error syncing orders on startup: $e');
   }
 
+  // Try to sync pending pengeluaran on app start (if online)
+  try {
+    final result = await SyncService.syncPengeluaran();
+    if (result['success'] && result['synced'] > 0) {
+      debugPrint('✅ ${result['synced']} offline pengeluaran synced on startup');
+    }
+  } catch (e) {
+    debugPrint('⚠️ Error syncing pengeluaran on startup: $e');
+  }
+
   runApp(const OrderKuyApp());
 }
 

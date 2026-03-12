@@ -391,11 +391,11 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                           ),
                           const SizedBox(width: 12),
                           // Title
-                          Expanded(
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'ABSENSI',
                                   style: TextStyle(
                                     color: Colors.white70,
@@ -404,7 +404,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const Text(
+                                Text(
                                   'KARYAWAN',
                                   style: TextStyle(
                                     color: Colors.white,
