@@ -83,9 +83,20 @@ class OrderKuyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OrderKuy!',
+      title: 'Kasvo',
       theme: ThemeData(
-        primarySwatch: Colors.red,
+        primarySwatch: const MaterialColor(0xFF1a315b, {
+          50: Color(0xFFE4E6EC),
+          100: Color(0xFFBBC2D0),
+          200: Color(0xFF8F9AB1),
+          300: Color(0xFF627192),
+          400: Color(0xFF1a315b),
+          500: Color(0xFF1a315b),
+          600: Color(0xFF0f2442),
+          700: Color(0xFF2c466b),
+          800: Color(0xFF1a2b4d),
+          900: Color(0xFF0f2442),
+        }),
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const SplashScreen(),
@@ -135,7 +146,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.red.shade900,
+      backgroundColor: const Color(0xFF1a315b),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -149,13 +160,13 @@ class _SplashScreenState extends State<SplashScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Image.network(
-                'https://orderkuy.indotechconsulting.com/assets/img/logo.png',
+                'https://orderkuy.indotechconsulting.com/assets/img/btb.png',
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  return Icon(
+                  return const Icon(
                     Icons.restaurant_menu,
                     size: 80,
-                    color: Colors.red.shade700,
+                    color: Color(0xFF2c466b),
                   );
                 },
               ),
@@ -164,7 +175,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
             // Nama aplikasi
             const Text(
-              'OrderKuy!',
+              'Kasvo',
               style: TextStyle(
                 fontSize: 40,
                 fontWeight: FontWeight.bold,

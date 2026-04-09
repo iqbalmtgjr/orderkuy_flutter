@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:orderkuy_kasir/models/pengeluaran.dart';
+import 'package:kasvo_kasir/models/pengeluaran.dart';
 
 // ignore: must_be_immutable
 class PengeluaranForm extends StatefulWidget {
@@ -89,13 +89,13 @@ class _PengeluaranFormState extends State<PengeluaranForm> {
         children: [
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.red.shade900, Colors.red.shade700],
+                colors: [Color(0xFF0f2040), Color(0xFF1a315b)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.only(
+              borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
               ),
@@ -220,7 +220,7 @@ class _PengeluaranFormState extends State<PengeluaranForm> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          backgroundColor: Colors.red.shade900,
+                          backgroundColor: const Color(0xFF1a315b),
                           foregroundColor: Colors.white,
                         ),
                         child: Text(

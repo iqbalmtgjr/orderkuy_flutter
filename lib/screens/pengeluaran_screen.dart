@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:orderkuy_kasir/screens/pengeluaran_form_screen.dart';
+import 'package:kasvo_kasir/screens/pengeluaran_form_screen.dart';
 import '../services/api_service.dart';
 import '../models/pengeluaran.dart';
 import '../core/database/db_helper.dart';
@@ -75,7 +75,6 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
           : null,
     );
 
-    // ← CHECK OFFLINE STATUS
     final offlineCount = await DBHelper.getOfflinePengeluaranCount();
 
     debugPrint('📦 Result: ${result.toString()}');
@@ -119,7 +118,6 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
           _totalPengeluaran = 0;
         }
 
-        // ← SET OFFLINE STATUS
         _isOfflineMode = result['offline'] ?? false;
         _offlinePendingCount = offlineCount;
 
@@ -164,7 +162,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['message'] ?? 'Sync gagal'),
-          backgroundColor: Colors.red.shade600,
+          backgroundColor: const Color(0xFF1a315b),
         ),
       );
     }
@@ -180,10 +178,10 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: const Color(0xFF1a315b).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.delete, color: Colors.red),
+              child: const Icon(Icons.delete, color: Color(0xFF1a315b)),
             ),
             const SizedBox(width: 12),
             const Text('Konfirmasi Hapus'),
@@ -200,7 +198,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: const Color(0xFF1a315b),
               foregroundColor: Colors.white,
             ),
             child: const Text('Hapus'),
@@ -287,9 +285,6 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // final theme = Theme.of(context);
-    // final colorScheme = theme.colorScheme;
-
     debugPrint(
         '🎨 Building UI - isLoading: $_isLoading, listLength: ${_pengeluaranList.length}');
 
@@ -306,9 +301,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
-        // ← TAMBAHKAN ACTIONS
         actions: [
-          // Offline indicator
           if (_isOfflineMode)
             Container(
               margin: const EdgeInsets.only(right: 8),
@@ -333,8 +326,6 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                 ],
               ),
             ),
-
-          // Pending sync indicator
           if (_offlinePendingCount > 0)
             Container(
               margin: const EdgeInsets.only(right: 8),
@@ -348,7 +339,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: const BoxDecoration(
-                          color: Colors.red,
+                          color: Color(0xFF1a315b),
                           shape: BoxShape.circle,
                         ),
                         child: Text(
@@ -383,14 +374,14 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.red.shade400, Colors.red.shade600],
+              gradient: const LinearGradient(
+                colors: [Color(0xFF2a4a7f), Color(0xFF1a315b)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.red.shade200.withOpacity(0.5),
+                  color: const Color(0xFF1a315b).withOpacity(0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 5),
                 ),
@@ -465,7 +456,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide:
-                          BorderSide(color: Colors.red.shade400, width: 2),
+                          const BorderSide(color: Color(0xFF2a4a7f), width: 2),
                     ),
                     filled: true,
                     fillColor: Colors.grey.shade50,
@@ -494,8 +485,8 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                             builder: (context, child) {
                               return Theme(
                                 data: Theme.of(context).copyWith(
-                                  colorScheme: ColorScheme.light(
-                                    primary: Colors.red.shade400,
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Color(0xFF1a315b),
                                   ),
                                 ),
                                 child: child!,
@@ -514,12 +505,12 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: _tanggalAwal != null
-                                ? Colors.red.shade50
+                                ? const Color(0xFFe8eef5)
                                 : Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: _tanggalAwal != null
-                                  ? Colors.red.shade400
+                                  ? const Color(0xFF2a4a7f)
                                   : Colors.grey.shade300,
                             ),
                           ),
@@ -529,7 +520,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                                 Icons.calendar_today,
                                 size: 16,
                                 color: _tanggalAwal != null
-                                    ? Colors.red.shade700
+                                    ? const Color(0xFF1a315b)
                                     : Colors.grey.shade600,
                               ),
                               const SizedBox(width: 8),
@@ -545,7 +536,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                                         ? FontWeight.w600
                                         : FontWeight.normal,
                                     color: _tanggalAwal != null
-                                        ? Colors.red.shade700
+                                        ? const Color(0xFF1a315b)
                                         : Colors.grey.shade600,
                                   ),
                                 ),
@@ -577,8 +568,8 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                             builder: (context, child) {
                               return Theme(
                                 data: Theme.of(context).copyWith(
-                                  colorScheme: ColorScheme.light(
-                                    primary: Colors.red.shade400,
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Color(0xFF1a315b),
                                   ),
                                 ),
                                 child: child!,
@@ -597,12 +588,12 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: _tanggalAkhir != null
-                                ? Colors.red.shade50
+                                ? const Color(0xFFe8eef5)
                                 : Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: _tanggalAkhir != null
-                                  ? Colors.red.shade400
+                                  ? const Color(0xFF2a4a7f)
                                   : Colors.grey.shade300,
                             ),
                           ),
@@ -612,7 +603,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                                 Icons.calendar_today,
                                 size: 16,
                                 color: _tanggalAkhir != null
-                                    ? Colors.red.shade700
+                                    ? const Color(0xFF1a315b)
                                     : Colors.grey.shade600,
                               ),
                               const SizedBox(width: 8),
@@ -628,7 +619,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                                         ? FontWeight.w600
                                         : FontWeight.normal,
                                     color: _tanggalAkhir != null
-                                        ? Colors.red.shade700
+                                        ? const Color(0xFF1a315b)
                                         : Colors.grey.shade600,
                                   ),
                                 ),
@@ -677,7 +668,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
 
                 return RefreshIndicator(
                   onRefresh: _loadPengeluaran,
-                  color: Colors.red.shade400,
+                  color: const Color(0xFF1a315b),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _pengeluaranList.length,
@@ -699,7 +690,7 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showPengeluaranForm(),
-        backgroundColor: Colors.red.shade400,
+        backgroundColor: const Color(0xFF1a315b),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Tambah'),
@@ -719,10 +710,10 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [
-                    Colors.red.shade100,
-                    Colors.red.shade50,
+                    Color(0xFFc8d5e8),
+                    Color(0xFFe8eef5),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -730,16 +721,16 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.shade100.withOpacity(0.5),
+                    color: const Color(0xFF1a315b).withOpacity(0.15),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
                 ],
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.receipt_long_outlined,
                 size: 60,
-                color: Colors.red.shade900,
+                color: Color(0xFF1a315b),
               ),
             ),
             const SizedBox(height: 24),
@@ -795,13 +786,13 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: const Color(0xFFe8eef5),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.shopping_bag_outlined,
                   size: 16,
-                  color: Colors.red.shade600,
+                  color: Color(0xFF1a315b),
                 ),
               ),
               const SizedBox(width: 12),
@@ -811,7 +802,6 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Name and Date
                     Row(
                       children: [
                         Expanded(
@@ -837,8 +827,6 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                         ),
                       ],
                     ),
-
-                    // Description (if exists)
                     if (pengeluaran.deskripsi != null &&
                         pengeluaran.deskripsi!.isNotEmpty) ...[
                       const SizedBox(height: 2),
@@ -852,15 +840,13 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
-
-                    // Amount
                     const SizedBox(height: 4),
                     Text(
                       _currencyFormat.format(pengeluaran.jumlah),
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.red.shade600,
+                        color: Color(0xFF1a315b),
                       ),
                     ),
                   ],
@@ -899,9 +885,10 @@ class _PengeluaranScreenState extends State<PengeluaranScreen> {
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(Icons.delete, size: 16, color: Colors.red),
+                        Icon(Icons.delete, size: 16, color: Color(0xFF1a315b)),
                         SizedBox(width: 8),
-                        Text('Hapus', style: TextStyle(color: Colors.red)),
+                        Text('Hapus',
+                            style: TextStyle(color: Color(0xFF1a315b))),
                       ],
                     ),
                   ),

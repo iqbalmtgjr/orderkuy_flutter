@@ -17,9 +17,9 @@
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
-        android:label="OrderKuy Kasir"
+        android:label="Kasvo"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/ic_launcher">
         <!-- DIHAPUS: android:usesCleartextTraffic="true" karena sudah HTTPS -->
         
         <activity
@@ -47,10 +47,3 @@
             android:value="2" />
     </application>
 </manifest>
-
-<!-- 
-PERUBAHAN:
-1. ❌ DIHAPUS: android:usesCleartextTraffic="true"
-2. ✅ Karena sekarang pakai HTTPS, tidak perlu cleartext traffic
-3. ✅ Permissions Bluetooth & Internet tetap ada
--->

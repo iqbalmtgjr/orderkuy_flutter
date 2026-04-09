@@ -123,7 +123,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
           ],
         ),
         backgroundColor:
-            isError ? const Color(0xFFB71C1C) : const Color(0xFF1B5E20),
+            isError ? const Color(0xFF0f2442) : const Color(0xFF1B5E20),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -141,7 +141,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
 
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.6),
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setDialogState) {
           return BackdropFilter(
@@ -156,7 +156,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.shade900.withOpacity(0.25),
+                      color: const Color(0xFF1a315b).withValues(alpha: 0.25),
                       blurRadius: 40,
                       offset: const Offset(0, 12),
                     ),
@@ -169,11 +169,11 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                     Container(
                       width: 64,
                       height: 64,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            Colors.red.shade400,
-                            Colors.red.shade900,
+                            Color(0xFF1e3a6e),
+                            Color(0xFF0f2442),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -222,15 +222,16 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                         hintText: '••••••••',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: Colors.red.shade200),
+                          borderSide:
+                              const BorderSide(color: Color(0xFF1e3a6e)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide:
-                              BorderSide(color: Colors.red.shade700, width: 2),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF1a315b), width: 2),
                         ),
-                        prefixIcon: Icon(Icons.lock_outline,
-                            color: Colors.red.shade700),
+                        prefixIcon: const Icon(Icons.lock_outline,
+                            color: Color(0xFF1a315b)),
                         suffixIcon: IconButton(
                           icon: Icon(
                             obscure
@@ -242,7 +243,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                               setDialogState(() => obscure = !obscure),
                         ),
                         filled: true,
-                        fillColor: Colors.red.shade50,
+                        fillColor: const Color(0xFFe8edf5),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -253,7 +254,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                             child: _ActionButton(
                               label: 'CHECK IN',
                               icon: Icons.login_rounded,
-                              color: Colors.red.shade700,
+                              color: const Color(0xFF1a315b),
                               onTap: () async {
                                 if (pwCtrl.text.isEmpty) {
                                   _msg('Password tidak boleh kosong',
@@ -320,8 +321,6 @@ class _AbsensiScreenState extends State<AbsensiScreen>
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final timeStr =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     final days = [
       'Senin',
       'Selasa',
@@ -352,7 +351,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF7B0000), Color(0xFFB71C1C), Color(0xFFD32F2F)],
+            colors: [Color(0xFF0f2442), Color(0xFF1a315b), Color(0xFF1e3a6e)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -376,10 +375,10 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.25),
+                                  color: Colors.white.withValues(alpha: 0.25),
                                 ),
                               ),
                               child: const Icon(
@@ -420,7 +419,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
+                              color: Colors.white.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: const Icon(
@@ -437,10 +436,10 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 14),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Row(
@@ -499,14 +498,14 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.shade50,
+                                  color: const Color(0xFFe8edf5),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
                                   '${karyawan.length} orang',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 12,
-                                    color: Colors.red.shade700,
+                                    color: Color(0xFF1a315b),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -518,7 +517,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                         child: loadingKaryawan
                             ? const Center(
                                 child: CircularProgressIndicator(
-                                  color: Colors.red,
+                                  color: Color(0xFF1a315b),
                                 ),
                               )
                             : karyawan.isEmpty
@@ -553,7 +552,7 @@ class _AbsensiScreenState extends State<AbsensiScreen>
               // global loading overlay
               if (loading)
                 Container(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   child: const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
@@ -624,11 +623,11 @@ class _KaryawanCardState extends State<_KaryawanCard>
 
     // Color palette cycling for avatars
     final List<List<Color>> palettes = [
-      [const Color(0xFFE53935), const Color(0xFF7B0000)],
+      [const Color(0xFF1e3a6e), const Color(0xFF0f2442)],
       [const Color(0xFF8E24AA), const Color(0xFF4A148C)],
       [const Color(0xFF1E88E5), const Color(0xFF0D47A1)],
       [const Color(0xFF43A047), const Color(0xFF1B5E20)],
-      [const Color(0xFFF4511E), const Color(0xFFBF360C)],
+      [const Color(0xFF1a315b), const Color(0xFF0f2442)],
     ];
     final palette = palettes[widget.index % palettes.length];
 
@@ -651,7 +650,7 @@ class _KaryawanCardState extends State<_KaryawanCard>
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
+                      color: Colors.black.withValues(alpha: 0.06),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -761,16 +760,18 @@ class _KaryawanCardState extends State<_KaryawanCard>
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color:
-                            isOut ? Colors.green.shade50 : Colors.red.shade50,
+                        color: isOut
+                            ? Colors.green.shade50
+                            : const Color(0xFFe8edf5),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         isOut
                             ? Icons.check_rounded
                             : Icons.chevron_right_rounded,
-                        color:
-                            isOut ? Colors.green.shade600 : Colors.red.shade700,
+                        color: isOut
+                            ? Colors.green.shade600
+                            : const Color(0xFF1a315b),
                         size: 20,
                       ),
                     ),

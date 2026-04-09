@@ -39,7 +39,6 @@ class _RupiahInputFormatter extends TextInputFormatter {
   }
 }
 
-// Helper class untuk segment option
 class _SegmentOption {
   final String label;
   final IconData icon;
@@ -73,30 +72,31 @@ class _KasirScreenState extends State<KasirScreen>
   bool _isOnline = true;
   bool _isBackgroundLoading = false;
 
-  // Form fields
   int _jenisOrder = Constants.jenisOrderDineIn;
   int _metodeBayar = Constants.metodeBayarCash;
   int? _selectedMejaId;
   String _catatan = '';
 
-  // Filter
   int? _selectedKategoriFilter;
   String _searchQuery = '';
 
-  // Cart
   double _totalHarga = 0;
   int _totalItem = 0;
 
-  // Payment
   final TextEditingController _nominalBayarController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _catatanController = TextEditingController();
   double _kembalian = 0;
 
-  // ✨ Bottom panel expand/collapse
   bool _isBottomPanelExpanded = false;
   AnimationController? _panelController;
-  Animation<double>? _panelAnimation;
+
+  // Navy blue palette
+  static const Color _primaryColor = Color(0xFF1a315b);
+  static const Color _primaryLight = Color(0xFF2a4a7f);
+  static const Color _primaryDark = Color(0xFF0f2040);
+  static const Color _primarySurface = Color(0xFFe8eef5);
+  static const Color _primarySurfaceDeep = Color(0xFFc8d5e8);
 
   static final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'id_ID',
@@ -151,15 +151,9 @@ class _KasirScreenState extends State<KasirScreen>
   @override
   void initState() {
     super.initState();
-
-    // ✅ Inisialisasi controller PERTAMA sebelum apapun
     _panelController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
-    );
-    _panelAnimation = CurvedAnimation(
-      parent: _panelController!,
-      curve: Curves.easeInOutCubic,
     );
 
     _loadData();
@@ -211,10 +205,6 @@ class _KasirScreenState extends State<KasirScreen>
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // CONNECTIVITY
-  // ═══════════════════════════════════════════════════════════
-
   Future<void> _checkConnectivity() async {
     final result = await Connectivity().checkConnectivity();
     setState(() => _isOnline = result != ConnectivityResult.none);
@@ -235,10 +225,8 @@ class _KasirScreenState extends State<KasirScreen>
     });
   }
 
-  // Update method dengan indicator
   Future<void> _loadDataWithIndicator() async {
     setState(() => _isLoading = true);
-
     try {
       final products = await ApiService.getMenusOfflineFirst(
         onDataUpdated: (freshProducts) {
@@ -246,9 +234,8 @@ class _KasirScreenState extends State<KasirScreen>
             setState(() {
               _products = freshProducts;
               _applyFilters();
-              _isBackgroundLoading = false; // ← Hide indicator
+              _isBackgroundLoading = false;
             });
-
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Row(
@@ -265,19 +252,17 @@ class _KasirScreenState extends State<KasirScreen>
           }
         },
       );
-
       final kategoris = await ApiService.getKategoris();
       final mejas = widget.orderToEdit != null
           ? await ApiService.getAllTables()
           : await ApiService.getFreeTables();
-
       setState(() {
         _products = products;
         _kategoris = kategoris;
         _filteredProducts = products;
         _mejas = mejas;
         _isLoading = false;
-        _isBackgroundLoading = true; // ← Show indicator saat fetch background
+        _isBackgroundLoading = true;
       });
     } catch (e) {
       setState(() => _isLoading = false);
@@ -286,20 +271,15 @@ class _KasirScreenState extends State<KasirScreen>
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-
     debugPrint('🔄 Loading data (Offline-First Strategy)...');
-
     try {
-      // Load products with offline-first strategy
       final products = await ApiService.getMenusOfflineFirst(
         onDataUpdated: (freshProducts) {
-          // Callback: dipanggil saat data baru dari server ready
           if (mounted) {
             setState(() {
               _products = freshProducts;
               _applyFilters();
             });
-
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('✅ Data menu diperbarui dari server'),
@@ -310,25 +290,16 @@ class _KasirScreenState extends State<KasirScreen>
           }
         },
       );
-
-      // ← CRITICAL FIX: Gunakan getKategorisOfflineFirst()
       final kategoris = await ApiService.getKategorisOfflineFirst(
         onDataUpdated: (freshKategoris) {
-          // Callback: update kategoris saat data baru ready
           if (mounted) {
-            setState(() {
-              _kategoris = freshKategoris;
-            });
-            debugPrint('✅ Kategoris updated from background fetch');
+            setState(() => _kategoris = freshKategoris);
           }
         },
       );
-
-      // Load mejas (online only, no cache needed)
       final mejas = widget.orderToEdit != null
           ? await ApiService.getAllTables()
           : await ApiService.getFreeTables();
-
       setState(() {
         _products = products;
         _kategoris = kategoris;
@@ -336,18 +307,14 @@ class _KasirScreenState extends State<KasirScreen>
         _mejas = mejas;
         _isLoading = false;
       });
-
-      debugPrint(
-          '✅ Initial data loaded: ${products.length} products, ${kategoris.length} kategoris');
     } catch (e) {
       debugPrint('❌ Error loading data: $e');
       setState(() => _isLoading = false);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error memuat data: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: _primaryColor,
             action: SnackBarAction(
               label: 'Coba Lagi',
               textColor: Colors.white,
@@ -369,15 +336,9 @@ class _KasirScreenState extends State<KasirScreen>
       );
       return;
     }
-
     setState(() => _isLoading = true);
-
-    // Clear cache first
     await DBHelper.clearAllCache();
-
-    // Reload data
     await _loadData();
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -581,8 +542,10 @@ class _KasirScreenState extends State<KasirScreen>
                             borderSide: BorderSide(color: Colors.grey.shade400),
                           ),
                           focusedBorder: const OutlineInputBorder(
-                            borderSide:
-                                BorderSide(color: Color(0xFFD32F2F), width: 2),
+                            borderSide: BorderSide(
+                              color: _primaryColor,
+                              width: 2,
+                            ),
                           ),
                           filled: true,
                           fillColor: Colors.grey.shade50,
@@ -638,10 +601,12 @@ class _KasirScreenState extends State<KasirScreen>
                 _savePesanan();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFD32F2F),
+                backgroundColor: _primaryColor,
                 foregroundColor: Colors.white,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
               child:
                   const Text('Bayar & Simpan', style: TextStyle(fontSize: 16)),
@@ -651,10 +616,6 @@ class _KasirScreenState extends State<KasirScreen>
       },
     );
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // SAVE PESANAN
-  // ═══════════════════════════════════════════════════════════
 
   Future<void> _savePesanan() async {
     showDialog(
@@ -780,7 +741,7 @@ class _KasirScreenState extends State<KasirScreen>
                 (isEditing
                     ? 'Gagal memperbarui pesanan'
                     : 'Gagal menyimpan pesanan')),
-            backgroundColor: Colors.red,
+            backgroundColor: _primaryColor,
           ),
         );
       }
@@ -817,10 +778,6 @@ class _KasirScreenState extends State<KasirScreen>
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════
-
   static const double _breakpointTablet = 600;
 
   @override
@@ -848,7 +805,7 @@ class _KasirScreenState extends State<KasirScreen>
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, true),
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
+                      backgroundColor: _primaryColor,
                       foregroundColor: Colors.white),
                   child: const Text('Ya, Keluar'),
                 ),
@@ -880,7 +837,7 @@ class _KasirScreenState extends State<KasirScreen>
                       ElevatedButton(
                         onPressed: () => Navigator.pop(context, true),
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                            backgroundColor: _primaryColor,
                             foregroundColor: Colors.white),
                         child: const Text('Ya, Keluar'),
                       ),
@@ -918,14 +875,14 @@ class _KasirScreenState extends State<KasirScreen>
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
+                colors: [_primaryColor, _primaryDark],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
             ),
           ),
           elevation: 10,
-          shadowColor: Colors.red.withValues(alpha: 0.5),
+          shadowColor: _primaryColor.withValues(alpha: 0.5),
           actions: [
             if (_isOnline)
               IconButton(
@@ -957,14 +914,9 @@ class _KasirScreenState extends State<KasirScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // MOBILE LAYOUT — Stack dengan floating bottom panel
-  // ═══════════════════════════════════════════════════════════
-
   Widget _buildMobileLayout(bool isEditing) {
     return Stack(
       children: [
-        // ── Produk List (background) ──
         Column(
           children: [
             Padding(
@@ -982,9 +934,9 @@ class _KasirScreenState extends State<KasirScreen>
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide:
-                        const BorderSide(color: Color(0xFFD32F2F), width: 2),
+                        const BorderSide(color: _primaryLight, width: 2),
                   ),
-                  prefixIcon: Icon(Icons.search, color: Colors.red[700]),
+                  prefixIcon: const Icon(Icons.search, color: _primaryColor),
                   isDense: true,
                   filled: true,
                   fillColor: Colors.grey.shade50,
@@ -1004,7 +956,6 @@ class _KasirScreenState extends State<KasirScreen>
                           ),
                         )
                       : GridView.builder(
-                          // Padding bawah agar tidak tertutup panel collapsed (~72px)
                           padding: const EdgeInsets.fromLTRB(8, 8, 8, 90),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1021,8 +972,6 @@ class _KasirScreenState extends State<KasirScreen>
             ),
           ],
         ),
-
-        // ── Floating Bottom Panel ──
         Positioned(
           left: 0,
           right: 0,
@@ -1033,11 +982,6 @@ class _KasirScreenState extends State<KasirScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Bottom Panel
-  // Collapsed : hanya bar kecil (icon keranjang + jumlah + tombol bayar)
-  // Expanded  : seluruh form order + cart + tombol bayar besar
-  // ─────────────────────────────────────────────
   Widget _buildBottomPanel(bool isEditing) {
     return Container(
       decoration: BoxDecoration(
@@ -1054,7 +998,6 @@ class _KasirScreenState extends State<KasirScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 8, bottom: 2),
@@ -1066,8 +1009,6 @@ class _KasirScreenState extends State<KasirScreen>
               ),
             ),
           ),
-
-          // ── Collapsed Bar (selalu tampil, tap untuk toggle) ──
           InkWell(
             onTap: _togglePanel,
             borderRadius: BorderRadius.circular(22),
@@ -1075,19 +1016,18 @@ class _KasirScreenState extends State<KasirScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  // Cart icon + badge jumlah item
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFD32F2F).withValues(alpha: 0.1),
+                          color: _primaryColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
                           Icons.shopping_cart_rounded,
-                          color: Color(0xFFD32F2F),
+                          color: _primaryColor,
                           size: 24,
                         ),
                       ),
@@ -1098,7 +1038,7 @@ class _KasirScreenState extends State<KasirScreen>
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: const BoxDecoration(
-                              color: Color(0xFFD32F2F),
+                              color: _primaryColor,
                               shape: BoxShape.circle,
                             ),
                             constraints: const BoxConstraints(
@@ -1119,7 +1059,6 @@ class _KasirScreenState extends State<KasirScreen>
                     ],
                   ),
                   const SizedBox(width: 12),
-                  // Ringkasan teks
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1145,12 +1084,11 @@ class _KasirScreenState extends State<KasirScreen>
                       ],
                     ),
                   ),
-                  // Tombol bayar ringkas (hanya saat ada item)
                   if (_totalItem > 0) ...[
                     ElevatedButton(
                       onPressed: _showPaymentDialog,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFD32F2F),
+                        backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 8),
@@ -1158,6 +1096,7 @@ class _KasirScreenState extends State<KasirScreen>
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
                       ),
                       child: const Text('Bayar',
                           style: TextStyle(
@@ -1165,7 +1104,6 @@ class _KasirScreenState extends State<KasirScreen>
                     ),
                     const SizedBox(width: 8),
                   ],
-                  // Chevron panah atas/bawah
                   AnimatedRotation(
                     turns: _isBottomPanelExpanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 350),
@@ -1177,8 +1115,6 @@ class _KasirScreenState extends State<KasirScreen>
               ),
             ),
           ),
-
-          // ── Expanded Content ──
           AnimatedSize(
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeInOutCubic,
@@ -1192,9 +1128,6 @@ class _KasirScreenState extends State<KasirScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Konten yang muncul saat panel di-expand
-  // ─────────────────────────────────────────────
   Widget _buildExpandedContent(bool isEditing) {
     return Container(
       constraints: BoxConstraints(
@@ -1207,8 +1140,6 @@ class _KasirScreenState extends State<KasirScreen>
           children: [
             const Divider(height: 1),
             const SizedBox(height: 14),
-
-            // ── Jenis Order + Metode Bayar (2 kolom) ──
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1257,22 +1188,15 @@ class _KasirScreenState extends State<KasirScreen>
                 )),
               ],
             ),
-
-            // ── Pilih Meja ──
             if (_jenisOrder == Constants.jenisOrderDineIn) ...[
               const SizedBox(height: 12),
               _buildTableSelector(),
             ],
-
-            // ── Catatan ──
             const SizedBox(height: 12),
             _buildNotesField(),
-
             const SizedBox(height: 14),
             const Divider(height: 1),
             const SizedBox(height: 10),
-
-            // ── Header Keranjang ──
             Row(
               children: [
                 const Text('Keranjang',
@@ -1284,7 +1208,7 @@ class _KasirScreenState extends State<KasirScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD32F2F),
+                      color: _primaryColor,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text('$_totalItem',
@@ -1298,18 +1222,18 @@ class _KasirScreenState extends State<KasirScreen>
             const SizedBox(height: 8),
             _buildCartItems(),
             const SizedBox(height: 10),
-
-            // ── Total Card ──
+            // Summary card — clean navy style
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red.shade50, Colors.red.shade100],
+                gradient: const LinearGradient(
+                  colors: [_primarySurface, _primarySurfaceDeep],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade200),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: _primaryColor.withValues(alpha: 0.15), width: 1),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1336,7 +1260,7 @@ class _KasirScreenState extends State<KasirScreen>
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFD32F2F),
+                          color: _primaryColor,
                         ),
                       ),
                     ],
@@ -1345,8 +1269,6 @@ class _KasirScreenState extends State<KasirScreen>
               ),
             ),
             const SizedBox(height: 14),
-
-            // ── Tombol Bayar Besar ──
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -1362,10 +1284,10 @@ class _KasirScreenState extends State<KasirScreen>
                       fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD32F2F),
+                  backgroundColor: _primaryColor,
                   foregroundColor: Colors.white,
-                  elevation: 6,
-                  shadowColor: Colors.red.withValues(alpha: 0.4),
+                  elevation: 4,
+                  shadowColor: _primaryColor.withValues(alpha: 0.35),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
@@ -1377,9 +1299,6 @@ class _KasirScreenState extends State<KasirScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Compact Segment Control (untuk panel mobile)
-  // ─────────────────────────────────────────────
   Widget _buildCompactSegment({
     required String label,
     required List<_SegmentOption> options,
@@ -1407,15 +1326,13 @@ class _KasirScreenState extends State<KasirScreen>
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(vertical: 7),
                     decoration: BoxDecoration(
-                      color: opt.isSelected
-                          ? const Color(0xFFD32F2F)
-                          : Colors.transparent,
+                      color:
+                          opt.isSelected ? _primaryColor : Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: opt.isSelected
                           ? [
                               BoxShadow(
-                                color: const Color(0xFFD32F2F)
-                                    .withValues(alpha: 0.3),
+                                color: _primaryColor.withValues(alpha: 0.25),
                                 blurRadius: 6,
                                 offset: const Offset(0, 2),
                               )
@@ -1456,7 +1373,6 @@ class _KasirScreenState extends State<KasirScreen>
     );
   }
 
-  // Summary satu baris untuk collapsed bar
   String _getOrderSummaryLine() {
     final jenis =
         _jenisOrder == Constants.jenisOrderDineIn ? 'Dine In' : 'Take Away';
@@ -1469,10 +1385,6 @@ class _KasirScreenState extends State<KasirScreen>
     }
     return '$jenis · $bayar$mejaText';
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // TABLET LAYOUT (tidak berubah)
-  // ═══════════════════════════════════════════════════════════
 
   Widget _buildTabletLayout(bool isEditing) {
     return Row(
@@ -1488,7 +1400,7 @@ class _KasirScreenState extends State<KasirScreen>
                   decoration: InputDecoration(
                     labelText: 'Cari Produk',
                     border: const OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.search, color: Colors.red[700]),
+                    prefixIcon: const Icon(Icons.search, color: _primaryColor),
                   ),
                 ),
               ),
@@ -1519,21 +1431,22 @@ class _KasirScreenState extends State<KasirScreen>
             ],
           ),
         ),
+        // Sidebar panel — clean navy gradient
         Expanded(
           flex: 2,
           child: Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.red[50]!, Colors.red[100]!],
+                colors: [_primarySurface, Color(0xFFdce6f2)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.red.withValues(alpha: 0.1),
+                  color: Color(0x1a1a315b),
                   spreadRadius: 2,
-                  blurRadius: 8,
-                  offset: const Offset(-2, 0),
+                  blurRadius: 12,
+                  offset: Offset(-2, 0),
                 ),
               ],
             ),
@@ -1566,17 +1479,17 @@ class _KasirScreenState extends State<KasirScreen>
                     child: ElevatedButton(
                       onPressed: _showPaymentDialog,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFD32F2F),
+                        backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
-                        elevation: 5,
-                        shadowColor: Colors.red.withValues(alpha: 0.3),
+                        elevation: 4,
+                        shadowColor: _primaryColor.withValues(alpha: 0.3),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(12)),
                       ).copyWith(
                         backgroundColor: WidgetStateProperty.resolveWith<Color>(
                           (states) => states.contains(WidgetState.hovered)
-                              ? const Color(0xFFB71C1C)
-                              : const Color(0xFFD32F2F),
+                              ? _primaryDark
+                              : _primaryColor,
                         ),
                       ),
                       child: Text(
@@ -1594,10 +1507,6 @@ class _KasirScreenState extends State<KasirScreen>
       ],
     );
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // SHARED WIDGET BUILDERS
-  // ═══════════════════════════════════════════════════════════
 
   Widget _buildKategoriFilter() {
     final isMobile = MediaQuery.of(context).size.width < _breakpointTablet;
@@ -1618,7 +1527,7 @@ class _KasirScreenState extends State<KasirScreen>
                   _applyFilters();
                 });
               },
-              selectedColor: const Color(0xFFD32F2F),
+              selectedColor: _primaryColor,
               backgroundColor: Colors.grey[200],
               labelStyle: TextStyle(
                 color: _selectedKategoriFilter == null
@@ -1642,7 +1551,7 @@ class _KasirScreenState extends State<KasirScreen>
                     _applyFilters();
                   });
                 },
-                selectedColor: const Color(0xFFD32F2F),
+                selectedColor: _primaryColor,
                 backgroundColor: Colors.grey[200],
                 labelStyle: TextStyle(
                   color: _selectedKategoriFilter == kategori.id
@@ -1673,15 +1582,16 @@ class _KasirScreenState extends State<KasirScreen>
         fontSize: isMobile ? 11 : 14);
 
     return Card(
-      elevation: isMobile ? 4 : 8,
+      elevation: isMobile ? 2 : 4,
       margin: isMobile ? const EdgeInsets.symmetric(horizontal: 2) : null,
-      shadowColor: Colors.red.withValues(alpha: 0.3),
+      shadowColor: _primaryColor.withValues(alpha: 0.15),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
-        side: const BorderSide(color: Color(0xFFD32F2F), width: 1),
+        side: BorderSide(color: _primaryColor.withValues(alpha: 0.2), width: 1),
       ),
       child: InkWell(
         onTap: () => _addToCart(product, 1),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1699,12 +1609,12 @@ class _KasirScreenState extends State<KasirScreen>
                           errorBuilder: (_, __, ___) => Icon(
                             Icons.restaurant_menu,
                             size: iconSize,
-                            color: Theme.of(context).primaryColor,
+                            color: _primaryLight,
                           ),
                         ),
                       )
                     : Icon(Icons.restaurant_menu,
-                        size: iconSize, color: Theme.of(context).primaryColor),
+                        size: iconSize, color: _primaryLight),
               ),
             ),
             Expanded(
@@ -1750,8 +1660,8 @@ class _KasirScreenState extends State<KasirScreen>
                 label: const Text('Dine In',
                     style: TextStyle(color: Colors.white, fontSize: 14)),
                 selected: _jenisOrder == Constants.jenisOrderDineIn,
-                selectedColor: const Color(0xFFD32F2F),
-                backgroundColor: const Color.fromARGB(255, 9, 0, 1),
+                selectedColor: _primaryColor,
+                backgroundColor: _primarySurfaceDeep,
                 onSelected: (_) =>
                     setState(() => _jenisOrder = Constants.jenisOrderDineIn),
               ),
@@ -1762,8 +1672,8 @@ class _KasirScreenState extends State<KasirScreen>
                 label: const Text('Take Away',
                     style: TextStyle(color: Colors.white, fontSize: 14)),
                 selected: _jenisOrder == Constants.jenisOrderTakeAway,
-                selectedColor: const Color(0xFFD32F2F),
-                backgroundColor: const Color.fromARGB(255, 9, 0, 1),
+                selectedColor: _primaryColor,
+                backgroundColor: _primarySurfaceDeep,
                 onSelected: (_) => setState(() {
                   _jenisOrder = Constants.jenisOrderTakeAway;
                   _selectedMejaId = null;
@@ -1790,8 +1700,8 @@ class _KasirScreenState extends State<KasirScreen>
                 label: const Text('Cash',
                     style: TextStyle(color: Colors.white, fontSize: 14)),
                 selected: _metodeBayar == Constants.metodeBayarCash,
-                selectedColor: const Color(0xFFD32F2F),
-                backgroundColor: const Color.fromARGB(255, 9, 0, 1),
+                selectedColor: _primaryColor,
+                backgroundColor: _primarySurfaceDeep,
                 onSelected: (_) =>
                     setState(() => _metodeBayar = Constants.metodeBayarCash),
               ),
@@ -1802,8 +1712,8 @@ class _KasirScreenState extends State<KasirScreen>
                 label: const Text('Transfer',
                     style: TextStyle(color: Colors.white, fontSize: 14)),
                 selected: _metodeBayar == Constants.metodeBayarTransfer,
-                selectedColor: const Color(0xFFD32F2F),
-                backgroundColor: const Color.fromARGB(255, 9, 0, 1),
+                selectedColor: _primaryColor,
+                backgroundColor: _primarySurfaceDeep,
                 onSelected: (_) => setState(
                     () => _metodeBayar = Constants.metodeBayarTransfer),
               ),
@@ -1821,7 +1731,7 @@ class _KasirScreenState extends State<KasirScreen>
         const Text('Pilih Meja', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          initialValue: _selectedMejaId,
+          value: _selectedMejaId,
           decoration: InputDecoration(
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             contentPadding:
@@ -1882,7 +1792,7 @@ class _KasirScreenState extends State<KasirScreen>
         final item = entry.value;
         return Card(
           margin: const EdgeInsets.only(bottom: 6),
-          elevation: 2,
+          elevation: 1,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           child: Padding(
@@ -1925,11 +1835,11 @@ class _KasirScreenState extends State<KasirScreen>
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade50,
+                          color: _primarySurface,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Icon(Icons.delete_outline,
-                            color: Colors.red.shade400, size: 18),
+                        child: const Icon(Icons.delete_outline,
+                            color: _primaryColor, size: 18),
                       ),
                     ),
                   ],
@@ -1971,24 +1881,21 @@ class _KasirScreenState extends State<KasirScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // NUMERIC KEYPAD
-  // ═══════════════════════════════════════════════════════════
-
   Widget _buildNumericKeypad(StateSetter setDialogState) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.grey.shade50, Colors.grey.shade100],
+        gradient: const LinearGradient(
+          colors: [Color(0xFFf4f7fb), Color(0xFFe8eef5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300, width: 1.5),
+        border: Border.all(
+            color: _primaryColor.withValues(alpha: 0.12), width: 1.5),
         boxShadow: [
           BoxShadow(
-              color: Colors.grey.shade300,
+              color: _primaryColor.withValues(alpha: 0.06),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
@@ -2036,7 +1943,7 @@ class _KasirScreenState extends State<KasirScreen>
               child: _buildKeypadActionButton(
                 'Del',
                 Icons.backspace,
-                const Color(0xFFD32F2F),
+                _primaryColor,
                 () => _removeDigitFromNominal(setDialogState),
               ),
             ),
@@ -2050,8 +1957,8 @@ class _KasirScreenState extends State<KasirScreen>
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
-      elevation: 3,
-      shadowColor: Colors.grey.shade400,
+      elevation: 2,
+      shadowColor: _primaryColor.withValues(alpha: 0.1),
       child: InkWell(
         onTap: () => _addDigitToNominal(digit, setDialogState),
         borderRadius: BorderRadius.circular(12),
@@ -2059,19 +1966,15 @@ class _KasirScreenState extends State<KasirScreen>
           height: 60,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
-            gradient: LinearGradient(
-              colors: [Colors.white, Colors.grey.shade50],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            border: Border.all(
+                color: _primaryColor.withValues(alpha: 0.12), width: 1),
           ),
           child: Center(
             child: Text(digit,
                 style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFD32F2F),
+                    color: _primaryColor,
                     letterSpacing: 1)),
           ),
         ),
@@ -2084,8 +1987,8 @@ class _KasirScreenState extends State<KasirScreen>
     return Material(
       color: color,
       borderRadius: BorderRadius.circular(12),
-      elevation: 3,
-      shadowColor: color.withOpacity(0.5),
+      elevation: 2,
+      shadowColor: color.withValues(alpha: 0.3),
       child: InkWell(
         onTap: onPressed,
         borderRadius: BorderRadius.circular(12),
@@ -2093,9 +1996,8 @@ class _KasirScreenState extends State<KasirScreen>
           height: 60,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.3), width: 1),
             gradient: LinearGradient(
-              colors: [color, color.withOpacity(0.8)],
+              colors: [color, color.withValues(alpha: 0.85)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),

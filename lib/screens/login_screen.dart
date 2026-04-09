@@ -176,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen>
                         fontSize: 13, fontWeight: FontWeight.w500))),
           ],
         ),
-        backgroundColor: const Color(0xFF1A0000),
+        backgroundColor: const Color(0xFF0a1a2e),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -197,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen>
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0D0000),
+        backgroundColor: const Color(0xFF050d1a),
         resizeToAvoidBottomInset: true,
         body: Stack(
           children: [
@@ -259,9 +259,9 @@ class _LoginScreenState extends State<LoginScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF1A0505),
-                  Color(0xFF2D0808),
-                  Color(0xFF0D0000),
+                  Color(0xFF0d1e3a),
+                  Color(0xFF152848),
+                  Color(0xFF050d1a),
                 ],
                 stops: [0.0, 0.5, 1.0],
               ),
@@ -275,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen>
               top: -size.width * 0.25,
               left: -size.width * 0.2,
               child: Transform.scale(
-                scale: _pulse?.value ?? 1.0,
+                scale: _pulse.value ?? 1.0,
                 child: Container(
                   width: size.width * 0.85,
                   height: size.width * 0.85,
@@ -283,8 +283,8 @@ class _LoginScreenState extends State<LoginScreen>
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        const Color(0xFFD32F2F).withOpacity(0.28),
-                        const Color(0xFFD32F2F).withOpacity(0.0),
+                        const Color(0xFF1a315b).withOpacity(0.28),
+                        const Color(0xFF1a315b).withOpacity(0.0),
                       ],
                     ),
                   ),
@@ -304,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFFE53935).withOpacity(0.15),
+                    const Color(0xFF2a4a7f).withOpacity(0.15),
                     Colors.transparent,
                   ],
                 ),
@@ -323,7 +323,7 @@ class _LoginScreenState extends State<LoginScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFFC62828).withOpacity(0.18),
+                    const Color(0xFF1a315b).withOpacity(0.18),
                     Colors.transparent,
                   ],
                 ),
@@ -360,7 +360,7 @@ class _LoginScreenState extends State<LoginScreen>
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFD32F2F).withOpacity(0.5),
+                  color: const Color(0xFF1a315b).withOpacity(0.5),
                   blurRadius: 32,
                   spreadRadius: 0,
                   offset: const Offset(0, 8),
@@ -375,13 +375,13 @@ class _LoginScreenState extends State<LoginScreen>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(24),
               child: Image.network(
-                'https://orderkuy.indotechconsulting.com/assets/img/logo.png',
+                'https://orderkuy.indotechconsulting.com/assets/img/btb.png',
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Center(
                   child: Icon(
                     Icons.restaurant_menu_rounded,
                     size: 48,
-                    color: Colors.red.shade700,
+                    color: const Color(0xFF1a315b),
                   ),
                 ),
               ),
@@ -408,12 +408,12 @@ class _LoginScreenState extends State<LoginScreen>
               // "OrderKuy!" dengan gaya display
               ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFFFFFFFF), Color(0xFFFFCDD2)],
+                  colors: [Color(0xFFFFFFFF), Color(0xFFCDD8F0)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ).createShader(bounds),
                 child: const Text(
-                  'OrderKuy!',
+                  'Kasvo',
                   style: TextStyle(
                     fontSize: 38,
                     fontWeight: FontWeight.w900,
@@ -582,7 +582,7 @@ class _LoginScreenState extends State<LoginScreen>
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isFocused
-              ? const Color(0xFFEF5350).withOpacity(0.7)
+              ? const Color(0xFF2a4a7f).withOpacity(0.7)
               : Colors.white.withOpacity(0.1),
           width: isFocused ? 1.5 : 1,
         ),
@@ -597,12 +597,12 @@ class _LoginScreenState extends State<LoginScreen>
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
-        cursorColor: const Color(0xFFEF5350),
+        cursorColor: const Color(0xFF2a4a7f),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(
             color: isFocused
-                ? const Color(0xFFEF9A9A)
+                ? const Color(0xFF7a9fd4)
                 : Colors.white.withOpacity(0.4),
             fontSize: 13,
             fontWeight: FontWeight.w500,
@@ -617,7 +617,7 @@ class _LoginScreenState extends State<LoginScreen>
             child: Icon(
               icon,
               color: isFocused
-                  ? const Color(0xFFEF5350)
+                  ? const Color(0xFF2a4a7f)
                   : Colors.white.withOpacity(0.35),
               size: 20,
             ),
@@ -636,7 +636,7 @@ class _LoginScreenState extends State<LoginScreen>
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           errorStyle: const TextStyle(
-            color: Color(0xFFFF8A80),
+            color: Color(0xFF7a9fd4),
             fontSize: 11,
           ),
         ),
@@ -660,7 +660,7 @@ class _LoginScreenState extends State<LoginScreen>
           ? Container(
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFB71C1C), Color(0xFFD32F2F)],
+                  colors: [Color(0xFF0f2040), Color(0xFF1a315b)],
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -683,9 +683,9 @@ class _LoginScreenState extends State<LoginScreen>
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
-                        Color(0xFFC62828),
-                        Color(0xFFE53935),
-                        Color(0xFFD32F2F),
+                        Color(0xFF0f2040),
+                        Color(0xFF1a315b),
+                        Color(0xFF243f70),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -693,7 +693,7 @@ class _LoginScreenState extends State<LoginScreen>
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFD32F2F).withOpacity(0.55),
+                        color: const Color(0xFF1a315b).withOpacity(0.55),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -787,7 +787,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              '© 2025 OrderKuy · Indotech Consulting',
+              '© 2025 Kasvo · Indotech Consulting',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.18),
                 fontSize: 11,

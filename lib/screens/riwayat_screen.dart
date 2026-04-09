@@ -98,7 +98,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFF1a315b),
           ),
         );
       }
@@ -187,7 +187,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
         title: const Text('Riwayat Transaksi'),
-        backgroundColor: Colors.red.shade700,
+        backgroundColor: const Color(0xFF1a315b),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -237,15 +237,15 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.red.shade700, Colors.red.shade900],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1a315b), Color(0xFF0f2040)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.red.withValues(alpha: 0.3),
+            color: const Color(0xFF1a315b).withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -318,7 +318,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     );
   }
 
-  // ✅ Search bar dengan tombol "Cari"
   Widget _buildSearchBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -334,12 +333,10 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       ),
       child: Row(
         children: [
-          // Icon search di kiri
           Padding(
             padding: const EdgeInsets.only(left: 14),
             child: Icon(Icons.search, color: Colors.grey.shade500, size: 20),
           ),
-          // TextField mengisi sisa ruang
           Expanded(
             child: TextField(
               controller: _searchController,
@@ -359,13 +356,12 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
               ),
             ),
           ),
-          // Tombol "Cari"
           Padding(
             padding: const EdgeInsets.all(6),
             child: ElevatedButton(
               onPressed: _loadData,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
+                backgroundColor: const Color(0xFF1a315b),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(
@@ -497,10 +493,10 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   ),
                   Text(
                     _formatRupiah(order.totalHarga),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.red.shade700,
+                      color: Color(0xFF1a315b),
                     ),
                   ),
                 ],
@@ -629,10 +625,10 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   ),
                   Text(
                     _formatRupiah(order.totalHarga),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.red.shade700,
+                      color: Color(0xFF1a315b),
                     ),
                   ),
                 ],
@@ -834,7 +830,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
                 Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
+                backgroundColor: const Color(0xFF1a315b),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(

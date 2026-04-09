@@ -19,6 +19,9 @@ class _PesananScreenState extends State<PesananScreen> {
   bool _isLoading = true;
   String? _filterJenisOrder;
 
+  static const Color _primaryColor = Color(0xFF1a315b);
+  static const Color _primaryDark = Color(0xFF0f2442);
+
   @override
   void initState() {
     super.initState();
@@ -62,8 +65,7 @@ class _PesananScreenState extends State<PesananScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child:
-                const Text('Batal', style: TextStyle(color: Color(0xFFD32F2F))),
+            child: const Text('Batal', style: TextStyle(color: _primaryColor)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -104,7 +106,7 @@ class _PesananScreenState extends State<PesananScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message'] ?? 'Gagal menyelesaikan pesanan'),
-            backgroundColor: Colors.red,
+            backgroundColor: _primaryColor,
           ),
         );
       }
@@ -194,7 +196,7 @@ class _PesananScreenState extends State<PesananScreen> {
         bgColor = Colors.orange;
       } else {
         msg = 'Gagal mencetak. Pastikan printer aktif dan coba lagi.';
-        bgColor = Colors.red;
+        bgColor = _primaryColor;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -210,7 +212,7 @@ class _PesananScreenState extends State<PesananScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error print: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: _primaryColor,
           duration: const Duration(seconds: 4),
         ),
       );
@@ -243,7 +245,7 @@ class _PesananScreenState extends State<PesananScreen> {
       leading: Radio<String?>(
         value: value,
         groupValue: _filterJenisOrder,
-        activeColor: const Color(0xFFD32F2F),
+        activeColor: _primaryColor,
         onChanged: (v) {
           setState(() => _filterJenisOrder = v);
           Navigator.pop(context);
@@ -253,14 +255,9 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════
-
   @override
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
-    // Tablet: 2 kolom, mobile: 1 kolom (list)
     final isTablet = sw > 600;
 
     return Scaffold(
@@ -272,11 +269,11 @@ class _PesananScreenState extends State<PesananScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFD32F2F)))
+                    child: CircularProgressIndicator(color: _primaryColor))
                 : _orders.isEmpty
                     ? _buildEmptyState()
                     : RefreshIndicator(
-                        color: const Color(0xFFD32F2F),
+                        color: _primaryColor,
                         onRefresh: _refreshOrders,
                         child:
                             isTablet ? _buildTabletGrid() : _buildMobileList(),
@@ -291,7 +288,7 @@ class _PesananScreenState extends State<PesananScreen> {
             MaterialPageRoute(builder: (context) => const KasirScreen()),
           ).then((_) => _loadOrders());
         },
-        backgroundColor: const Color(0xFFD32F2F),
+        backgroundColor: _primaryColor,
         foregroundColor: Colors.white,
         elevation: 6,
         icon: const Icon(Icons.add),
@@ -315,7 +312,7 @@ class _PesananScreenState extends State<PesananScreen> {
       flexibleSpace: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
+            colors: [_primaryColor, _primaryDark],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -337,9 +334,6 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // MOBILE: ListView — tidak ada overflow
-  // ─────────────────────────────────────────────
   Widget _buildMobileList() {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
@@ -349,15 +343,11 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // TABLET: 2-kolom grid, pakai crossAxisExtent
-  // ─────────────────────────────────────────────
   Widget _buildTabletGrid() {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 400,
-        // Tidak pakai childAspectRatio — gunakan mainAxisExtent tetap
         mainAxisExtent: 220,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
@@ -367,9 +357,6 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // ORDER CARD — tinggi mengikuti konten (tidak pakai Expanded)
-  // ─────────────────────────────────────────────
   Widget _buildOrderCard(Order order) {
     final isDineIn = order.jenisOrder == 1;
     final hasCatatan = order.catatan != null && order.catatan!.isNotEmpty;
@@ -389,20 +376,19 @@ class _PesananScreenState extends State<PesananScreen> {
           ],
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min, // ← ikuti konten
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header merah ──
+            // ── Header navy ──
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFB71C1C), Color(0xFFD32F2F)],
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_primaryDark, _primaryColor],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
                 children: [
@@ -422,7 +408,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                     ),
                   ),
-                  // Badge PENDING
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -451,14 +436,13 @@ class _PesananScreenState extends State<PesananScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Item count + Total
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
                           Icon(Icons.shopping_cart_outlined,
-                              size: 15, color: Colors.red.shade700),
+                              size: 15, color: _primaryColor),
                           const SizedBox(width: 4),
                           Text(
                             '${order.items.length} item${order.items.length > 1 ? 's' : ''}',
@@ -480,8 +464,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                     ],
                   ),
-
-                  // Catatan (opsional)
                   if (hasCatatan) ...[
                     const SizedBox(height: 8),
                     Container(
@@ -514,13 +496,9 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                     ),
                   ],
-
                   const SizedBox(height: 12),
-
-                  // Tombol aksi
                   Row(
                     children: [
-                      // Edit
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: order.id == 0
@@ -553,13 +531,11 @@ class _PesananScreenState extends State<PesananScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Selesai
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed:
-                              order.id == 0 // ← order offline, disable tombol
-                                  ? null
-                                  : () => _selesaikanPesanan(order.id),
+                          onPressed: order.id == 0
+                              ? null
+                              : () => _selesaikanPesanan(order.id),
                           icon:
                               const Icon(Icons.check_circle_outline, size: 16),
                           label: const Text(
@@ -590,9 +566,6 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // EMPTY STATE
-  // ─────────────────────────────────────────────
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -603,12 +576,12 @@ class _PesananScreenState extends State<PesananScreen> {
             Container(
               width: 110,
               height: 110,
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
+              decoration: const BoxDecoration(
+                color: Color(0xFFe8eef5),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.receipt_long_outlined,
-                  size: 52, color: Colors.red.shade300),
+              child: const Icon(Icons.receipt_long_outlined,
+                  size: 52, color: _primaryColor),
             ),
             const SizedBox(height: 24),
             Text(
@@ -635,9 +608,6 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // DETAIL BOTTOM SHEET
-  // ─────────────────────────────────────────────
   void _showOrderDetails(Order order) {
     final isDineIn = order.jenisOrder == 1;
     final hasCatatan = order.catatan != null && order.catatan!.isNotEmpty;
@@ -657,7 +627,6 @@ class _PesananScreenState extends State<PesananScreen> {
           ),
           child: Column(
             children: [
-              // Handle bar
               Container(
                 margin: const EdgeInsets.only(top: 10, bottom: 4),
                 width: 40,
@@ -667,15 +636,13 @@ class _PesananScreenState extends State<PesananScreen> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-
-              // Header
               Container(
                 margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFB71C1C), Color(0xFFD32F2F)],
+                    colors: [_primaryDark, _primaryColor],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -718,8 +685,6 @@ class _PesananScreenState extends State<PesananScreen> {
                   ],
                 ),
               ),
-
-              // Scrollable body
               Expanded(
                 child: ListView(
                   controller: scrollController,
@@ -731,8 +696,6 @@ class _PesananScreenState extends State<PesananScreen> {
                           TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
-
-                    // Items
                     ...order.items.map(
                       (item) => Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -746,11 +709,11 @@ class _PesananScreenState extends State<PesananScreen> {
                           children: [
                             CircleAvatar(
                               radius: 18,
-                              backgroundColor: Colors.red.shade100,
+                              backgroundColor: const Color(0xFFe8eef5),
                               child: Text(
                                 '${item.qty}x',
-                                style: TextStyle(
-                                  color: Colors.red.shade900,
+                                style: const TextStyle(
+                                  color: _primaryColor,
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -783,10 +746,7 @@ class _PesananScreenState extends State<PesananScreen> {
                         ),
                       ),
                     ),
-
                     const Divider(height: 28),
-
-                    // Catatan
                     if (hasCatatan) ...[
                       Row(
                         children: [
@@ -812,8 +772,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-
-                    // Total
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -838,27 +796,23 @@ class _PesananScreenState extends State<PesananScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 20),
-
-                    // Tombol aksi
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed:
-                                order.id == 0 // ← order offline, disable tombol
-                                    ? null
-                                    : () {
-                                        Navigator.pop(context);
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                KasirScreen(orderToEdit: order),
-                                          ),
-                                        ).then((_) => _loadOrders());
-                                      },
+                            onPressed: order.id == 0
+                                ? null
+                                : () {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            KasirScreen(orderToEdit: order),
+                                      ),
+                                    ).then((_) => _loadOrders());
+                                  },
                             icon: const Icon(Icons.edit_outlined, size: 16),
                             label: const Text('Edit'),
                             style: OutlinedButton.styleFrom(
@@ -873,13 +827,12 @@ class _PesananScreenState extends State<PesananScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed:
-                                order.id == 0 // ← order offline, disable tombol
-                                    ? null
-                                    : () {
-                                        Navigator.pop(context);
-                                        _printReceipt(order);
-                                      },
+                            onPressed: order.id == 0
+                                ? null
+                                : () {
+                                    Navigator.pop(context);
+                                    _printReceipt(order);
+                                  },
                             icon: const Icon(Icons.print_outlined, size: 16),
                             label: const Text('Print'),
                             style: OutlinedButton.styleFrom(
@@ -894,13 +847,12 @@ class _PesananScreenState extends State<PesananScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed:
-                                order.id == 0 // ← order offline, disable tombol
-                                    ? null
-                                    : () {
-                                        Navigator.pop(context);
-                                        _selesaikanPesanan(order.id);
-                                      },
+                            onPressed: order.id == 0
+                                ? null
+                                : () {
+                                    Navigator.pop(context);
+                                    _selesaikanPesanan(order.id);
+                                  },
                             icon: const Icon(Icons.check_circle_outline,
                                 size: 16),
                             label: const Text('Selesai'),
@@ -916,7 +868,6 @@ class _PesananScreenState extends State<PesananScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 8),
                   ],
                 ),
@@ -928,7 +879,6 @@ class _PesananScreenState extends State<PesananScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
   String _formatRupiah(double amount) {
     final formatted = amount.toStringAsFixed(0);
     return 'Rp ${formatted.replaceAllMapped(

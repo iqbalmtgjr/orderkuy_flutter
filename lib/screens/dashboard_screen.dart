@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:orderkuy_kasir/screens/pengeluaran_screen.dart';
+import 'package:kasvo_kasir/screens/pengeluaran_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
@@ -13,35 +13,26 @@ import 'absensi_screen.dart';
 // RESPONSIVE HELPER
 // ─────────────────────────────────────────────────────────────────────────────
 class _R {
-  final double sw; // screen width
-  final double sh; // screen height
+  final double sw;
+  final double sh;
 
   const _R(this.sw, this.sh);
 
-  // ── Breakpoints ──
-  // Tablet landscape biasanya sw >= 768 dan sw/sh > 1.2
   bool get isPhone => sw < 600;
   bool get isTabletPortrait => sw >= 600 && sw < 900;
   bool get isTabletLandscape => sw >= 900;
   bool get isLandscape => sw > sh;
 
-  // ── Basis ukuran yang adaptif ──
-  // Di tablet landscape, kita pakai sh (tinggi layar) sebagai basis agar
-  // elemen tidak terlalu besar
   double get _base => isTabletLandscape ? sh * 0.9 : sw;
 
-  // ── Spacing ──
   double get pagePadH => _base * 0.044;
   double get pagePadV => sh * 0.018;
   double get cardRadius => _base * 0.056;
   double get sectionGap => sh * 0.022;
 
-  // ── Max width untuk layout 2-kolom di tablet landscape ──
   double get contentMaxW => isTabletLandscape ? sw * 0.92 : sw;
-  // Header content dibatasi agar tidak terlalu lebar
   double get headerContentMaxW => isTabletLandscape ? 680.0 : 520.0;
 
-  // ── Typography — lebih kecil di tablet landscape ──
   double get fontXs => isTabletLandscape
       ? (_base * 0.026).clamp(10, 12)
       : (_base * 0.028).clamp(10, 13);
@@ -61,7 +52,6 @@ class _R {
       ? (_base * 0.044).clamp(15, 20)
       : (_base * 0.052).clamp(17, 22);
 
-  // ── Icon ──
   double get iconSm => isTabletLandscape
       ? (_base * 0.028).clamp(11, 14)
       : (_base * 0.030).clamp(12, 15);
@@ -72,7 +62,6 @@ class _R {
       ? (_base * 0.052).clamp(18, 24)
       : (_base * 0.060).clamp(20, 26);
 
-  // ── Avatar / Menu Icon ──
   double get avatarSize => isTabletLandscape
       ? (_base * 0.085).clamp(32, 42)
       : (_base * 0.100).clamp(36, 46);
@@ -83,21 +72,15 @@ class _R {
       ? (_base * 0.050).clamp(17, 22)
       : (_base * 0.058).clamp(19, 25);
 
-  // ── Card ──
   double get cardPad => _base * 0.05;
   double get saldoCardMarginH => _base * 0.04;
 
-  // ── Grid ──
-  // Di tablet landscape, menu bisa 2 baris 3 kolom atau 1 baris 5 kolom
   int get menuCrossAxis => isTabletLandscape ? 5 : (isTabletPortrait ? 5 : 4);
   double get menuAspect =>
       isTabletLandscape ? 0.90 : (isTabletPortrait ? 0.85 : 0.78);
 
-  // ── Layout helper ──
-  // Apakah gunakan layout 2 kolom (header kiri, summary kanan) di tablet landscape
   bool get useTwoColumnLayout => isTabletLandscape;
 
-  // Padding vertikal header lebih kecil di landscape
   double get headerPadV => isTabletLandscape ? sh * 0.012 : sh * 0.018;
 }
 
@@ -157,7 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         setState(() {
           _userName = user['name'] ?? 'Kasir';
           _userRole = user['role'] ?? 'kasir';
-          _tokoNama = user['toko_nama'] ?? 'OrderKuy!';
+          _tokoNama = user['toko_nama'] ?? 'Kasvo';
         });
         _animationController?.forward();
       }
@@ -203,10 +186,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: const Color(0xFF1a315b).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(Icons.logout, color: Colors.red, size: r.iconMd),
+              child: Icon(Icons.logout,
+                  color: const Color(0xFF1a315b), size: r.iconMd),
             ),
             SizedBox(width: r.pagePadH * 0.6),
             Text('Konfirmasi Logout',
@@ -224,7 +208,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: const Color(0xFF1a315b),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
@@ -254,10 +238,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     )}';
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // BUILD ROOT
-  // ═══════════════════════════════════════════════════════════
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -269,7 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           ? Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
+                  colors: [Color(0xFF1a315b), Color(0xFF0f2442)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -287,9 +267,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // LAYOUT: MOBILE / TABLET PORTRAIT
-  // ═══════════════════════════════════════════════════════════
   Widget _buildMobileLayout(_R r) {
     return CustomScrollView(
       slivers: [
@@ -313,21 +290,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // LAYOUT: TABLET LANDSCAPE — 2 KOLOM
-  // Kiri: Header + Menu  |  Kanan: Saldo Card + Ringkasan
-  // ═══════════════════════════════════════════════════════════
   Widget _buildTabletLandscapeLayout(_R r) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Kolom Kiri: Header gradient + Menu ──
         SizedBox(
           width: r.sw * 0.42,
           child: _buildLeftColumnTablet(r),
         ),
-
-        // ── Kolom Kanan: Saldo + Ringkasan ──
         Expanded(
           child: Container(
             color: const Color(0xFFF2F3F7),
@@ -363,15 +333,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     return Stack(
       children: [
-        // Gradient background full height
         Positioned.fill(
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Color(0xFFC62828),
-                  Color(0xFFE53935),
-                  Color(0xFFEF5350)
+                  Color(0xFF0f2442),
+                  Color(0xFF1a315b),
+                  Color(0xFF1e3a6e),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -380,8 +349,6 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
         ),
-
-        // Dekorasi lingkaran
         Positioned(
           top: -r.sw * 0.07,
           right: -r.sw * 0.07,
@@ -397,8 +364,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           left: -r.sw * 0.04,
           child: _decorCircle(r.sw * 0.16, 0.04),
         ),
-
-        // Konten
         SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.symmetric(
@@ -406,7 +371,6 @@ class _DashboardScreenState extends State<DashboardScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Logo + OrderKuy! (referensi dari login screen) ──
                 Center(
                   child: Column(
                     children: [
@@ -414,31 +378,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                         width: r.sh * 0.08,
                         height: r.sh * 0.08,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: const Color(0xFF1a315b).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(r.sh * 0.02),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF8B0000).withOpacity(0.5),
-                              blurRadius: 20,
-                              offset: const Offset(0, 6),
-                            ),
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.35),
-                              blurRadius: 12,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(r.sh * 0.02),
                           child: Image.network(
-                            'https://orderkuy.indotechconsulting.com/assets/img/logo.png',
+                            'https://orderkuy.indotechconsulting.com/assets/img/logo_new.png',
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => Center(
                               child: Icon(
                                 Icons.restaurant_menu_rounded,
                                 size: r.sh * 0.045,
-                                color: Colors.red.shade700,
+                                color: const Color(0xFF1a315b),
                               ),
                             ),
                           ),
@@ -447,14 +399,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                       SizedBox(height: r.headerPadV * 0.7),
                       ShaderMask(
                         shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Color(0xFFFFFFFF), Color(0xFFFFCDD2)],
+                          colors: [Color(0xFFFFFFFF), Color(0xFFCCD6F0)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ).createShader(bounds),
                         child: Text(
-                          'OrderKuy!',
+                          'kasvo',
                           style: TextStyle(
                             fontSize: r.fontTitle * 1.15,
+                            fontFamily: 'Poppins',
                             fontWeight: FontWeight.w900,
                             color: Colors.white,
                             letterSpacing: -0.8,
@@ -468,16 +421,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                             horizontal: r.pagePadH * 0.7,
                             vertical: r.headerPadV * 0.2),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(r.sw * 0.05),
-                          border:
-                              Border.all(color: Colors.white.withOpacity(0.18)),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.18)),
                         ),
                         child: Text(
                           'Sistem Kasir Digital',
                           style: TextStyle(
                             fontSize: r.fontXs * 0.95,
-                            color: Colors.white.withOpacity(0.6),
+                            color: Colors.white.withValues(alpha: 0.6),
                             fontWeight: FontWeight.w400,
                             letterSpacing: 0.3,
                           ),
@@ -486,12 +439,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ],
                   ),
                 ),
-
                 SizedBox(height: r.headerPadV * 1.4),
-                Divider(color: Colors.white.withOpacity(0.15), height: 1),
+                Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
                 SizedBox(height: r.headerPadV * 1.2),
-
-                // ── User info bar ──
                 Row(
                   children: [
                     _buildAvatar(r),
@@ -500,10 +450,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     _buildLogoutBtn(r),
                   ],
                 ),
-
                 SizedBox(height: r.headerPadV * 0.8),
-
-                // Nama toko + role
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -524,31 +471,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                     _buildRoleBadge(r),
                   ],
                 ),
-
                 SizedBox(height: r.headerPadV * 1.4),
-
-                // Divider tipis
-                Divider(
-                  color: Colors.white.withOpacity(0.2),
-                  height: 1,
-                ),
-
+                Divider(color: Colors.white.withValues(alpha: 0.2), height: 1),
                 SizedBox(height: r.headerPadV * 1.2),
-
-                // Label menu
                 Text(
                   'Menu',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     fontSize: r.fontXs,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 1.0,
                   ),
                 ),
-
                 SizedBox(height: r.headerPadV * 0.8),
-
-                // Menu list (vertikal di tablet landscape)
                 _buildMenuListTablet(r),
               ],
             ),
@@ -558,10 +493,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  /// Menu vertikal di kolom kiri tablet landscape
   Widget _buildMenuListTablet(_R r) {
     final menus = _getMenuData();
-
     return Column(
       children: menus.map((menu) {
         return Padding(
@@ -579,9 +512,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         padding: EdgeInsets.symmetric(
             horizontal: r.pagePadH * 0.8, vertical: r.sh * 0.013),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
+          color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(r.cardRadius * 0.7),
-          border: Border.all(color: Colors.white.withOpacity(0.18)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
         ),
         child: Row(
           children: [
@@ -589,7 +522,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               width: r.menuIconBox * 0.7,
               height: r.menuIconBox * 0.7,
               decoration: BoxDecoration(
-                color: menu.bgColor.withOpacity(0.9),
+                color: menu.bgColor.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(r.sw * 0.022),
               ),
               child: Icon(menu.icon,
@@ -607,16 +540,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             const Spacer(),
             Icon(Icons.chevron_right_rounded,
-                color: Colors.white.withOpacity(0.5), size: r.iconSm),
+                color: Colors.white.withValues(alpha: 0.5), size: r.iconSm),
           ],
         ),
       ),
     );
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // HEADER + SALDO CARD (Mobile)
-  // ═══════════════════════════════════════════════════════════
 
   Widget _buildHeaderWithCard(_R r) {
     final hour = DateTime.now().hour;
@@ -637,7 +566,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         padding: EdgeInsets.only(bottom: curveHeight),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFC62828), Color(0xFFE53935), Color(0xFFEF5350)],
+            colors: [Color(0xFF0f2442), Color(0xFF1a315b), Color(0xFF1e3a6e)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             stops: [0.0, 0.5, 1.0],
@@ -728,7 +657,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withOpacity(opacity),
+          color: Colors.white.withValues(alpha: opacity),
         ),
       );
 
@@ -737,10 +666,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       width: r.avatarSize,
       height: r.avatarSize,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         shape: BoxShape.circle,
         border: Border.all(
-            color: Colors.white.withOpacity(0.4), width: r.sw * 0.004),
+            color: Colors.white.withValues(alpha: 0.4), width: r.sw * 0.004),
       ),
       child: Center(
         child: Text(
@@ -763,7 +692,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           greeting,
           style: TextStyle(
             fontSize: r.fontXs,
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white.withValues(alpha: 0.7),
           ),
         ),
         Text(
@@ -787,9 +716,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Container(
         padding: EdgeInsets.all(r.sw * 0.022),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: Colors.white.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(r.sw * 0.03),
-          border: Border.all(color: Colors.white.withOpacity(0.25)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
         ),
         child: Icon(Icons.logout_rounded, color: Colors.white, size: r.iconMd),
       ),
@@ -801,9 +730,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       padding: EdgeInsets.symmetric(
           horizontal: r.pagePadH * 0.6, vertical: r.pagePadV * 0.25),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(r.sw * 0.05),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Text(
         _userRole.toUpperCase(),
@@ -817,7 +746,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Saldo Card ──
   Widget _buildSaldoCard(_R r) {
     return Container(
       padding: EdgeInsets.all(r.cardPad),
@@ -826,7 +754,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         borderRadius: BorderRadius.circular(r.cardRadius * 1.1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: r.sw * 0.066,
             offset: Offset(0, r.sw * 0.028),
           ),
@@ -999,17 +927,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // MENU SECTION (Mobile/Tablet Portrait)
-  // ═══════════════════════════════════════════════════════════
-
   List<_MenuData> _getMenuData() {
     return [
       _MenuData(
         icon: Icons.point_of_sale_rounded,
         label: 'Kasir',
-        color: const Color(0xFFD32F2F),
-        bgColor: const Color(0xFFFFF0F0),
+        color: const Color(0xFF1a315b),
+        bgColor: const Color(0xFFe8edf5),
         onTap: () => Navigator.push(
             context, MaterialPageRoute(builder: (_) => const PesananScreen())),
       ),
@@ -1088,7 +1012,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               borderRadius: BorderRadius.circular(r.sw * 0.044),
               boxShadow: [
                 BoxShadow(
-                  color: menu.color.withOpacity(0.12),
+                  color: menu.color.withValues(alpha: 0.12),
                   blurRadius: r.sw * 0.022,
                   offset: Offset(0, r.sw * 0.008),
                 ),
@@ -1113,10 +1037,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       ),
     );
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // RINGKASAN TRANSAKSI
-  // ═══════════════════════════════════════════════════════════
 
   Widget _buildTransactionSummary(_R r) {
     final today = DateTime.now();
@@ -1245,7 +1165,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         padding: EdgeInsets.symmetric(
             horizontal: r.pagePadH * 0.72, vertical: r.pagePadV * 0.66),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
+          color: color.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(r.cardRadius * 0.7),
         ),
         child: Row(
@@ -1253,7 +1173,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             Container(
               padding: EdgeInsets.all(r.sw * 0.016),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, size: r.iconSm, color: color),
@@ -1267,7 +1187,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     label,
                     style: TextStyle(
                       fontSize: r.fontXs,
-                      color: color.withOpacity(0.8),
+                      color: color.withValues(alpha: 0.8),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -1291,10 +1211,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // REUSABLE HELPERS
-  // ═══════════════════════════════════════════════════════════
-
   Widget _buildCard({required _R r, required Widget child}) {
     return Container(
       width: double.infinity,
@@ -1304,7 +1220,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         borderRadius: BorderRadius.circular(r.cardRadius),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: r.sw * 0.033,
             offset: Offset(0, r.sw * 0.006),
           ),
@@ -1358,9 +1274,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 }
 
-// ─────────────────────────────────────────────
-// Custom clipper
-// ─────────────────────────────────────────────
 class _BottomWaveClipper extends CustomClipper<Path> {
   final double curveHeight;
   _BottomWaveClipper(this.curveHeight);
@@ -1384,7 +1297,6 @@ class _BottomWaveClipper extends CustomClipper<Path> {
   bool shouldReclip(_BottomWaveClipper old) => old.curveHeight != curveHeight;
 }
 
-// ─────────────────────────────────────────────
 class _MenuData {
   final IconData icon;
   final String label;

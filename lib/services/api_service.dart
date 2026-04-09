@@ -206,7 +206,7 @@ class ApiService {
         } else {
           debugPrint('⚠️ Background: API failed ${response.statusCode}');
         }
-      } on TimeoutException catch (e) {
+      } on TimeoutException {
         // ← Suppress timeout errors - this is expected when offline/slow
         debugPrint(
             '⏱️ Background fetch timed out (expected when offline/slow)');
@@ -414,7 +414,7 @@ class ApiService {
           debugPrint(
               '⚠️ Background: Kategoris API failed ${response.statusCode}');
         }
-      } on TimeoutException catch (e) {
+      } on TimeoutException {
         // ← Suppress timeout errors - this is expected when offline/slow
         debugPrint(
             '⏱️ Background kategoris timed out (expected when offline/slow)');
@@ -911,12 +911,15 @@ class ApiService {
       String url = '$baseUrl/pengeluaran';
       final queryParams = <String, String>{};
       if (search != null && search.isNotEmpty) queryParams['search'] = search;
-      if (tanggalAwal != null && tanggalAwal.isNotEmpty)
+      if (tanggalAwal != null && tanggalAwal.isNotEmpty) {
         queryParams['tanggal_awal'] = tanggalAwal;
-      if (tanggalAkhir != null && tanggalAkhir.isNotEmpty)
+      }
+      if (tanggalAkhir != null && tanggalAkhir.isNotEmpty) {
         queryParams['tanggal_akhir'] = tanggalAkhir;
-      if (namaPengeluaranFilter != null && namaPengeluaranFilter.isNotEmpty)
+      }
+      if (namaPengeluaranFilter != null && namaPengeluaranFilter.isNotEmpty) {
         queryParams['nama_pengeluaran_filter'] = namaPengeluaranFilter;
+      }
       if (queryParams.isNotEmpty) {
         url +=
             '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
@@ -1170,7 +1173,6 @@ class ApiService {
           'message': responseData['message'] ?? 'Gagal menghapus pengeluaran',
         };
       }
-      ;
     } catch (e) {
       return {'success': false, 'message': 'Error: ${e.toString()}'};
     }
@@ -1195,10 +1197,12 @@ class ApiService {
       Map<String, String> queryParams = {'page': page.toString()};
       if (tanggalDari != null) queryParams['tanggal_dari'] = tanggalDari;
       if (tanggalSampai != null) queryParams['tanggal_sampai'] = tanggalSampai;
-      if (jenisOrder != null)
+      if (jenisOrder != null) {
         queryParams['jenis_order'] = jenisOrder.toString();
-      if (metodePembayaran != null)
+      }
+      if (metodePembayaran != null) {
         queryParams['metode_pembayaran'] = metodePembayaran.toString();
+      }
       if (search != null && search.isNotEmpty) queryParams['search'] = search;
       final uri =
           Uri.parse('$baseUrl/riwayat').replace(queryParameters: queryParams);

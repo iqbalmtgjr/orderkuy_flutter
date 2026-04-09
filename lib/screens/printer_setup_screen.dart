@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_thermal_printer/utils/printer.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/print_service.dart';
 import '../services/permission_service.dart';
 
@@ -18,11 +17,9 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
   List<Printer> _printers = [];
   bool _isScanning = false;
 
-  // Saved printers
   Printer? _savedKasir;
   Printer? _savedDapur;
 
-  // Currently selected during scan session
   Printer? _pendingKasir;
   Printer? _pendingDapur;
 
@@ -67,7 +64,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
         if (mounted) {
           setState(() => _isScanning = false);
           _showSnack(
-              'Izin Bluetooth diperlukan untuk scan printer', Colors.red);
+              'Izin Bluetooth diperlukan untuk scan printer', Colors.orange);
         }
         return;
       }
@@ -87,7 +84,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
     } catch (e) {
       if (mounted) {
         setState(() => _isScanning = false);
-        _showSnack('Error scanning: $e', Colors.red);
+        _showSnack('Error scanning: $e', const Color(0xFF1a315b));
       }
     }
   }
@@ -102,7 +99,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
               .timeout(const Duration(seconds: 15), onTimeout: () => false);
 
       if (!mounted) return;
-      Navigator.pop(context); // close loading
+      Navigator.pop(context);
 
       setState(() {
         if (role == PrinterRole.kasir) {
@@ -125,7 +122,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showSnack('Error: $e', Colors.red);
+      _showSnack('Error: $e', const Color(0xFF1a315b));
     }
   }
 
@@ -149,11 +146,11 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
         success
             ? 'Test print berhasil!'
             : 'Test print gagal. Pastikan printer aktif dan ada kertas.',
-        success ? Colors.green : Colors.red,
+        success ? Colors.green : const Color(0xFF1a315b),
       );
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showSnack('Error: $e', Colors.red);
+      _showSnack('Error: $e', const Color(0xFF1a315b));
     }
   }
 
@@ -171,7 +168,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
+                backgroundColor: const Color(0xFF1a315b),
+                foregroundColor: Colors.white),
             child: const Text('Ya, Hapus'),
           ),
         ],
@@ -239,7 +237,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Setup Printer'),
-        backgroundColor: Colors.red.shade900,
+        backgroundColor: const Color(0xFF1a315b),
         foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
@@ -270,7 +268,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
       ),
       body: Column(
         children: [
-          // Scan Button — shared untuk kedua tab
+          // Scan Button
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: SizedBox(
@@ -291,7 +289,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
                         : 'Scan Printer Bluetooth',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade900,
+                    backgroundColor: const Color(0xFF1a315b),
                     foregroundColor: Colors.white),
               ),
             ),
@@ -461,9 +459,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
               color: Colors.grey.shade100,
               boxShadow: const [
                 BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 8,
-                    offset: Offset(0, -2))
+                    color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))
               ],
             ),
             child: Column(
@@ -489,8 +485,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
                     icon: const Icon(Icons.delete_forever, size: 18),
                     label: Text('Hapus Printer $label'),
                     style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red.shade700,
-                        side: BorderSide(color: Colors.red.shade300)),
+                        foregroundColor: const Color(0xFF1a315b),
+                        side: const BorderSide(color: Color(0xFF2a4a7f))),
                   ),
                 ),
               ],
