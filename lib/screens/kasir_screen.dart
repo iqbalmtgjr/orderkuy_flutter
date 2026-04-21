@@ -12,6 +12,7 @@ import '../utils/constants.dart';
 import 'printer_setup_screen.dart';
 import '../widgets/sync_status_widget.dart';
 import '../core/database/db_helper.dart';
+import '../widgets/option_picker_dialog.dart';
 
 class _RupiahInputFormatter extends TextInputFormatter {
   @override
@@ -180,7 +181,10 @@ class _KasirScreenState extends State<KasirScreen>
           'menu_id': item.menuId,
           'nama_produk': item.menuNama,
           'harga': item.harga,
+          'harga_dasar': item.harga,
           'qty': item.qty,
+          'option_item_ids': <int>[], // edit order tidak re-pick opsi
+          'has_options': false,
         });
       }
       _calculateTotals();
@@ -363,8 +367,8 @@ class _KasirScreenState extends State<KasirScreen>
     });
   }
 
-  void _addToCart(Product product, int qty) {
-    if (product.qty < qty) {
+  void _addToCart(Product product, int qty) async {
+    if (product.useStock && product.qty < qty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -373,9 +377,62 @@ class _KasirScreenState extends State<KasirScreen>
       }
       return;
     }
+
+    // BARU: Jika menu punya opsi, tampilkan dialog pilih opsi dulu
+    if (product.hasOptions && product.optionGroups.isNotEmpty) {
+      final result = await OptionPickerDialog.show(
+        context,
+        product: product,
+        initialQty: qty,
+      );
+
+      // User batal / tutup dialog
+      if (result == null || !mounted) return;
+
+      final selectedQty = result['qty'] as int;
+      final optionItemIds = result['option_item_ids'] as List<int>;
+      final hargaPerItem = result['harga_per_item'] as double;
+
+      setState(() {
+        // Menu dengan opsi selalu jadi item terpisah (tidak digabung)
+        // karena pilihan opsinya bisa berbeda
+        _selectedItems.add({
+          'menu_id': product.id,
+          'nama_produk': product.namaProduk,
+          'harga': hargaPerItem, // harga sudah include opsi
+          'harga_dasar': product.harga, // simpan harga asli untuk referensi
+          'qty': selectedQty,
+          'option_item_ids': optionItemIds,
+          'has_options': true,
+        });
+        _calculateTotals();
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Text('${product.namaProduk} ditambahkan'),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Menu tanpa opsi — logika lama, tidak berubah
     setState(() {
       final existingIndex = _selectedItems.indexWhere(
-        (item) => item['menu_id'] == product.id,
+        (item) => item['menu_id'] == product.id && item['has_options'] != true,
       );
       if (existingIndex != -1) {
         _selectedItems[existingIndex]['qty'] += qty;
@@ -385,10 +442,13 @@ class _KasirScreenState extends State<KasirScreen>
           'nama_produk': product.namaProduk,
           'harga': product.harga,
           'qty': qty,
+          'option_item_ids': <int>[],
+          'has_options': false,
         });
       }
       _calculateTotals();
     });
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -644,7 +704,10 @@ class _KasirScreenState extends State<KasirScreen>
           .map((item) => {
                 'menu_id': item['menu_id'],
                 'qty': item['qty'],
-                'harga': item['harga'],
+                'harga': item['harga_dasar'] ??
+                    item['harga'], // kirim harga DASAR ke server
+                'option_item_ids':
+                    (item['option_item_ids'] as List?)?.cast<int>() ?? [],
               })
           .toList(),
       'total_harga': _totalHarga,
@@ -751,8 +814,7 @@ class _KasirScreenState extends State<KasirScreen>
   Future<List<bool>> _printAll(Map<String, dynamic> orderData) async {
     try {
       final kasirNama = orderData['user']?['name']?.toString();
-      final tokoNama =
-          orderData['toko']?['nama_toko']?.toString() ?? 'OrderKuy';
+      final tokoNama = orderData['toko']?['nama_toko']?.toString() ?? 'Kasvo';
       final tokoAlamat = orderData['toko']?['alamat']?.toString() ?? '';
       String? mejaNo;
       if (_jenisOrder == Constants.jenisOrderDineIn &&
@@ -1633,9 +1695,24 @@ class _KasirScreenState extends State<KasirScreen>
                     Text(_currencyFormat.format(product.harga),
                         style: priceStyle),
                     SizedBox(height: isMobile ? 2 : 4),
-                    Text('Stok: ${product.qty}',
-                        style: TextStyle(
-                            fontSize: isMobile ? 10 : 12, color: Colors.grey)),
+                    product.useStock
+                        ? Text(
+                            'Stok: ${product.qty}',
+                            style: TextStyle(
+                              fontSize: isMobile ? 10 : 12,
+                              color: product.qty <= 5
+                                  ? Colors.orange
+                                  : Colors.grey,
+                            ),
+                          )
+                        : Text(
+                            'Tersedia',
+                            style: TextStyle(
+                              fontSize: isMobile ? 10 : 12,
+                              color: Colors.green.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                   ],
                 ),
               ),
@@ -1786,10 +1863,16 @@ class _KasirScreenState extends State<KasirScreen>
         ),
       );
     }
+
     return Column(
       children: _selectedItems.asMap().entries.map((entry) {
         final index = entry.key;
         final item = entry.value;
+
+        // Cari nama-nama opsi yang dipilih untuk ditampilkan
+        // (hanya tampil jika ada opsi)
+        final hasOptions = item['has_options'] == true;
+
         return Card(
           margin: const EdgeInsets.only(bottom: 6),
           elevation: 1,
@@ -1803,14 +1886,38 @@ class _KasirScreenState extends State<KasirScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(item['nama_produk'],
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 13),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                      Text(_currencyFormat.format(item['harga']),
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600)),
+                      Text(
+                        item['nama_produk'],
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        _currencyFormat.format(item['harga']),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                      // BARU: tampilkan badge opsi jika ada
+                      if (hasOptions) ...[
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFe8eef5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Punya opsi',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF1a315b),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

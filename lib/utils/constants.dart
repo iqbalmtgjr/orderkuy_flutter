@@ -7,7 +7,7 @@ class Constants {
   // ============================================
   // DEVELOPMENT - Local IP (Commented)
   // ============================================
-  // static const String baseUrl = 'http://192.168.1.100:8000/api';
+  // static const String baseUrl = 'http://192.168.100.107:8000/api';
 
   // Endpoints
   static const String loginEndpoint = '/login';

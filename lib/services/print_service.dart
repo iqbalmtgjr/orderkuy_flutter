@@ -296,7 +296,7 @@ class ThermalPrintService {
                 height: PosTextSize.size2,
                 width: PosTextSize.size2,
                 bold: true));
-        bytes += generator.text('ORDERKUY!',
+        bytes += generator.text('Kasvo',
             styles: const PosStyles(
                 align: PosAlign.center,
                 height: PosTextSize.size2,
@@ -519,7 +519,7 @@ class ThermalPrintService {
     final dateStr =
         '${_pad(now.day)}/${_pad(now.month)}/${now.year} ${_pad(now.hour)}:${_pad(now.minute)}';
 
-    bytes += generator.text('OrderKuy!',
+    bytes += generator.text('Kasvo',
         styles: const PosStyles(
             align: PosAlign.center,
             height: PosTextSize.size2,
@@ -676,7 +676,7 @@ class ThermalPrintService {
         styles: const PosStyles(align: PosAlign.center));
     bytes += generator.text('Selamat Menikmati',
         styles: const PosStyles(align: PosAlign.center));
-    bytes += generator.text('Powered by OrderKuy!',
+    bytes += generator.text('Powered by Kasvo',
         styles: const PosStyles(align: PosAlign.center));
     bytes += generator.feed(3);
     bytes += generator.cut();
