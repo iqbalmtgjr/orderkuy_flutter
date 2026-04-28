@@ -16,7 +16,7 @@ dependencies:
   path: ^1.9.0
 
   # Network & Connectivity
-  connectivity_plus: ^5.0.2
+  connectivity_plus: ^7.1.1
   http: ^1.1.0
   uuid: ^4.2.1
 
@@ -29,11 +29,11 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
 
   # Mobile-only plugins (akan diabaikan di Windows)
-  permission_handler: ^11.3.0 # Android only
-  geolocator: ^10.1.0 # Limited Windows support
+  permission_handler: ^12.0.1 # Android only
+  geolocator: ^14.0.2 # Limited Windows support
 
   # Printer (optional - mobile only)
-  flutter_thermal_printer: ^1.2.4 # Android/iOS only
+  flutter_thermal_printer: ^2.0.1 # Android/iOS only
 
   # Image processing (cross-platform)
   image: ^4.5.4
@@ -41,7 +41,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
   intl_utils: ^2.8.7
 
 flutter:
