@@ -1459,10 +1459,10 @@ class _KasirScreenState extends State<KasirScreen>
                 padding: const EdgeInsets.all(8.0),
                 child: TextField(
                   controller: _searchController,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Cari Produk',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.search, color: _primaryColor),
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.search, color: _primaryColor),
                   ),
                 ),
               ),
@@ -1808,7 +1808,7 @@ class _KasirScreenState extends State<KasirScreen>
         const Text('Pilih Meja', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          value: _selectedMejaId,
+          initialValue: _selectedMejaId,
           decoration: InputDecoration(
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             contentPadding:
@@ -1908,9 +1908,9 @@ class _KasirScreenState extends State<KasirScreen>
                             color: const Color(0xFFe8eef5),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
+                          child: const Text(
                             'Punya opsi',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
                               color: Color(0xFF1a315b),
                               fontWeight: FontWeight.w500,

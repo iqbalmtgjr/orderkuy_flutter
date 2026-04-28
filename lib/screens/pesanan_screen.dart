@@ -441,7 +441,7 @@ class _PesananScreenState extends State<PesananScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.shopping_cart_outlined,
+                          const Icon(Icons.shopping_cart_outlined,
                               size: 15, color: _primaryColor),
                           const SizedBox(width: 4),
                           Text(

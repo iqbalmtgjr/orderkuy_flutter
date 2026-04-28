@@ -377,11 +377,11 @@ class _LoginScreenState extends State<LoginScreen>
               child: Image.network(
                 'https://orderkuy.indotechconsulting.com/assets/img/btb.png',
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Center(
+                errorBuilder: (_, __, ___) => const Center(
                   child: Icon(
                     Icons.restaurant_menu_rounded,
                     size: 48,
-                    color: const Color(0xFF1a315b),
+                    color: Color(0xFF1a315b),
                   ),
                 ),
               ),
