@@ -29,7 +29,7 @@ class ThermalPrintService {
 
   // ── Settings ────────────────────────────────────────────────────────────────
   // Koneksi dianggap masih segar selama 30 detik sejak print terakhir
-  static const Duration _connectionFreshDuration = Duration(seconds: 30);
+  static const Duration _connectionFreshDuration = Duration(minutes: 2);
   static const int _maxErrors = 3;
 
   // ── SEPARATE queue per printer ─────────────────────────────────────────────
@@ -205,7 +205,7 @@ class ThermalPrintService {
       if (force && connected) {
         try {
           await _printer.disconnect(target);
-          await Future.delayed(const Duration(milliseconds: 100));
+          await Future.delayed(const Duration(milliseconds: 600));
         } catch (_) {}
       }
 
@@ -248,7 +248,7 @@ class ThermalPrintService {
   static Future<bool> _runKasirJob(Future<bool> Function() job) async {
     // Tunggu jika kasir sedang printing
     while (_kasirPrinting) {
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 30));
     }
     _kasirPrinting = true;
     try {
@@ -261,7 +261,7 @@ class ThermalPrintService {
   static Future<bool> _runDapurJob(Future<bool> Function() job) async {
     // Tunggu jika dapur sedang printing
     while (_dapurPrinting) {
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 30));
     }
     _dapurPrinting = true;
     try {
@@ -279,7 +279,17 @@ class ThermalPrintService {
     final runJob = role == PrinterRole.kasir ? _runKasirJob : _runDapurJob;
     return runJob(() async {
       try {
-        if (!await _smartConnect(role, force: true)) return false;
+        // ✅ HAPUS force: true — cukup smart connect biasa
+        // Hanya force reconnect jika banyak error atau koneksi sudah lama
+        final errors = role == PrinterRole.kasir ? _kasirErrors : _dapurErrors;
+        final lastPrint =
+            role == PrinterRole.kasir ? _kasirLastPrint : _dapurLastPrint;
+
+        final needForce = errors >= 2 ||
+            lastPrint == null ||
+            DateTime.now().difference(lastPrint) > const Duration(minutes: 5);
+
+        if (!await _smartConnect(role, force: needForce)) return false;
 
         final generator = await _getGenerator();
         final target =
@@ -606,8 +616,21 @@ class ThermalPrintService {
           : double.parse(item['harga'].toString());
       final total = qty * harga;
       subtotal += total;
+
+      // Nama produk
       bytes += generator.text(nama,
           styles: const PosStyles(bold: true, align: PosAlign.left));
+
+      // FIX: cetak opsi/varian di bawah nama jika ada
+      final opsi = item['opsi']?.toString() ?? '';
+      if (opsi.isNotEmpty) {
+        bytes += generator.text('  * $opsi',
+            styles: const PosStyles(
+              align: PosAlign.left,
+              // italic: true,
+            ));
+      }
+
       bytes += generator.row([
         PosColumn(
             text: '$qty x ${_formatRupiah(harga)}',
@@ -782,6 +805,8 @@ class ThermalPrintService {
     for (var item in items) {
       final nama = item['nama_produk'] ?? '';
       final qty = item['qty'] ?? 0;
+
+      // Nama + qty (besar)
       bytes += generator.row([
         PosColumn(
             text: '${qty}x',
@@ -797,6 +822,16 @@ class ThermalPrintService {
             styles: const PosStyles(
                 align: PosAlign.left, height: PosTextSize.size2)),
       ]);
+
+      // FIX: cetak opsi/varian di bawah nama jika ada
+      final opsi = item['opsi']?.toString() ?? '';
+      if (opsi.isNotEmpty) {
+        bytes += generator.text('   >> $opsi',
+            styles: const PosStyles(
+              align: PosAlign.left,
+              bold: true, // bold di nota dapur agar dapur mudah baca
+            ));
+      }
     }
 
     bytes += generator.text('================================',

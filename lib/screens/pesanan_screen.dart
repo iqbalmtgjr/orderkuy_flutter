@@ -21,6 +21,7 @@ class _PesananScreenState extends State<PesananScreen> {
 
   static const Color _primaryColor = Color(0xFF1a315b);
   static const Color _primaryDark = Color(0xFF0f2442);
+  static const Color _primarySurface = Color(0xFFe8eef5);
 
   @override
   void initState() {
@@ -132,12 +133,14 @@ class _PesananScreenState extends State<PesananScreen> {
         return;
       }
 
+      // Sertakan opsi di items untuk print
       final items = order.items
           .map((item) => {
                 'menu_id': item.menuId,
                 'nama_produk': item.menuNama,
-                'harga': item.harga,
+                'harga': item.harga + item.totalHargaOpsi.toDouble(),
                 'qty': item.qty,
+                if (item.opsiDipilih.isNotEmpty) 'opsi': item.opsiLabel,
               })
           .toList();
 
@@ -184,7 +187,6 @@ class _PesananScreenState extends State<PesananScreen> {
 
       String msg;
       Color bgColor;
-
       if (kasirOk && dapurOk) {
         msg = 'Struk kasir & nota dapur berhasil dicetak';
         bgColor = Colors.green;
@@ -348,7 +350,7 @@ class _PesananScreenState extends State<PesananScreen> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 400,
-        mainAxisExtent: 220,
+        mainAxisExtent: 240,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
@@ -360,6 +362,10 @@ class _PesananScreenState extends State<PesananScreen> {
   Widget _buildOrderCard(Order order) {
     final isDineIn = order.jenisOrder == 1;
     final hasCatatan = order.catatan != null && order.catatan!.isNotEmpty;
+
+    // Ringkasan item — maks 2 item tampil, sisanya "+N lagi"
+    final itemPreview = order.items.take(2).toList();
+    final moreCount = order.items.length - itemPreview.length;
 
     return GestureDetector(
       onTap: () => _showOrderDetails(order),
@@ -379,7 +385,7 @@ class _PesananScreenState extends State<PesananScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header navy ──
+            // ── Header ──────────────────────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               decoration: const BoxDecoration(
@@ -429,41 +435,29 @@ class _PesananScreenState extends State<PesananScreen> {
               ),
             ),
 
-            // ── Body ──
+            // ── Body ────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.shopping_cart_outlined,
-                              size: 15, color: _primaryColor),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${order.items.length} item${order.items.length > 1 ? 's' : ''}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        _formatRupiah(order.totalHarga),
+                  // Preview item dengan variannya
+                  ...itemPreview.map((item) => _buildItemPreviewRow(item)),
+                  if (moreCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '+$moreCount item lainnya — tap untuk lihat semua',
                         style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+
+                  // Catatan
                   if (hasCatatan) ...[
                     const SizedBox(height: 8),
                     Container(
@@ -488,7 +482,7 @@ class _PesananScreenState extends State<PesananScreen> {
                                 color: Colors.grey.shade700,
                                 fontStyle: FontStyle.italic,
                               ),
-                              maxLines: 2,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -496,7 +490,31 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
+
+                  const SizedBox(height: 10),
+
+                  // Total + tombol aksi
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatRupiah(order.totalHarga),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                      Text(
+                        '${order.items.length} item',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
@@ -562,6 +580,86 @@ class _PesananScreenState extends State<PesananScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Preview singkat 1 item di card ──────────────────────────
+  Widget _buildItemPreviewRow(OrderItem item) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Badge qty
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: _primarySurface,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${item.qty}x',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: _primaryColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Nama menu + label varian
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.menuNama,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (item.opsiDipilih.isNotEmpty)
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 2,
+                    children: item.opsiDipilih
+                        .map((opsi) => Container(
+                              margin: const EdgeInsets.only(top: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: _primarySurface,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: _primaryColor.withOpacity(0.2),
+                                ),
+                              ),
+                              child: Text(
+                                opsi.namaItem,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: _primaryColor,
+                                ),
+                              ),
+                            ))
+                        .toList(),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Subtotal (qty × harga + opsi)
+          Text(
+            _formatRupiah(item.subtotal),
+            style: const TextStyle(
+              fontSize: 13,
+              color: _primaryColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -636,6 +734,7 @@ class _PesananScreenState extends State<PesananScreen> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
+              // Header
               Container(
                 margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 padding:
@@ -657,13 +756,27 @@ class _PesananScreenState extends State<PesananScreen> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        isDineIn ? 'Meja ${order.mejaNo ?? "-"}' : 'Take Away',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isDineIn
+                                ? 'Meja ${order.mejaNo ?? "-"}'
+                                : 'Take Away',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '${order.jenisOrderText} · ${order.metodeBayarText}',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.75),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Container(
@@ -685,6 +798,8 @@ class _PesananScreenState extends State<PesananScreen> {
                   ],
                 ),
               ),
+
+              // Body scrollable
               Expanded(
                 child: ListView(
                   controller: scrollController,
@@ -696,57 +811,13 @@ class _PesananScreenState extends State<PesananScreen> {
                           TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
-                    ...order.items.map(
-                      (item) => Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: const Color(0xFFe8eef5),
-                              child: Text(
-                                '${item.qty}x',
-                                style: const TextStyle(
-                                  color: _primaryColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(item.menuNama,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14)),
-                                  Text(
-                                    _formatRupiah(item.harga),
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              _formatRupiah(item.subtotal),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+
+                    // ── Daftar item ──────────────────────────
+                    ...order.items.map((item) => _buildDetailItemCard(item)),
+
                     const Divider(height: 28),
+
+                    // ── Catatan ──────────────────────────────
                     if (hasCatatan) ...[
                       Row(
                         children: [
@@ -772,6 +843,8 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
+
+                    // ── Total ────────────────────────────────
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -797,6 +870,8 @@ class _PesananScreenState extends State<PesananScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
+
+                    // ── Tombol aksi ──────────────────────────
                     Row(
                       children: [
                         Expanded(
@@ -875,6 +950,149 @@ class _PesananScreenState extends State<PesananScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ── Card detail item di bottom sheet ────────────────────────
+  Widget _buildDetailItemCard(OrderItem item) {
+    final hasOpsi = item.opsiDipilih.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Baris utama: qty, nama, subtotal ──────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: _primarySurface,
+                  child: Text(
+                    '${item.qty}x',
+                    style: const TextStyle(
+                      color: _primaryColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.menuNama,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      const SizedBox(height: 2),
+                      // Harga dasar × qty
+                      Text(
+                        '${_formatRupiah(item.harga)} × ${item.qty}',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+                // Kolom kanan: subtotal sebagai angka utama
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _formatRupiah(item.subtotal),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    if (item.totalHargaOpsi > 0)
+                      Text(
+                        'termasuk +${_formatRupiah(item.totalHargaOpsi.toDouble())} opsi',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // ── Baris opsi/varian (jika ada) ──────────────────
+          if (hasOpsi) ...[
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFe8eef5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.tune, size: 13, color: _primaryColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Pilihan:',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Kelompokkan per group
+                  ...item.opsiDipilih.map((opsi) => Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 4,
+                              height: 4,
+                              margin: const EdgeInsets.only(right: 8, top: 2),
+                              decoration: const BoxDecoration(
+                                color: _primaryColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '${opsi.namaGroup}: ${opsi.namaItem}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: _primaryColor),
+                              ),
+                            ),
+                            if (opsi.hargaTambahan > 0)
+                              Text(
+                                '+${_formatRupiah(opsi.hargaTambahan.toDouble())}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -33,9 +33,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("key.jks")
-            storePassword = "password"
+            storePassword = "iqbal280312"
             keyAlias = "key"
-            keyPassword = "password"
+            keyPassword = "iqbal280312"
         }
     }
 

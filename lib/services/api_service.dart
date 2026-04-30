@@ -793,9 +793,10 @@ class ApiService {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
       final response = await http.put(
-        Uri.parse('$baseUrl/orders/$orderId'),
+        Uri.parse('$baseUrl/orders/$orderId'), // ← tambah /api/
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json', // ← tambah ini
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode(orderData),

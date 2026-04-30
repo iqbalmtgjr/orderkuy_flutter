@@ -138,7 +138,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
     _showLoadingDialog('Testing printer...');
     try {
       final success = await ThermalPrintService.printTest(role: role)
-          .timeout(const Duration(seconds: 20), onTimeout: () => false);
+          .timeout(const Duration(seconds: 30), onTimeout: () => false);
       if (!mounted) return;
       Navigator.pop(context);
 

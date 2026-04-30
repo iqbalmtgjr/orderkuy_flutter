@@ -71,7 +71,7 @@ class _KasirScreenState extends State<KasirScreen>
   final List<Map<String, dynamic>> _selectedItems = [];
   bool _isLoading = true;
   bool _isOnline = true;
-  bool _isBackgroundLoading = false;
+  final bool _isBackgroundLoading = false;
 
   int _jenisOrder = Constants.jenisOrderDineIn;
   int _metodeBayar = Constants.metodeBayarCash;
@@ -180,13 +180,14 @@ class _KasirScreenState extends State<KasirScreen>
         _selectedItems.add({
           'menu_id': item.menuId,
           'nama_produk': item.menuNama,
-          'harga': item.harga,
+          'harga': item.harga + item.totalHargaOpsi.toDouble(),
           'harga_dasar': item.harga,
           'qty': item.qty,
-          'option_item_ids': <int>[], // edit order tidak re-pick opsi
-          'has_options': false,
+          'option_item_ids': item.opsiDipilih.map((o) => o.id).toList(),
+          'has_options': item.opsiDipilih.isNotEmpty,
         });
       }
+
       _calculateTotals();
     }
   }
@@ -227,50 +228,6 @@ class _KasirScreenState extends State<KasirScreen>
         );
       }
     });
-  }
-
-  Future<void> _loadDataWithIndicator() async {
-    setState(() => _isLoading = true);
-    try {
-      final products = await ApiService.getMenusOfflineFirst(
-        onDataUpdated: (freshProducts) {
-          if (mounted) {
-            setState(() {
-              _products = freshProducts;
-              _applyFilters();
-              _isBackgroundLoading = false;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.white, size: 20),
-                    SizedBox(width: 8),
-                    Text('Menu diperbarui dari server'),
-                  ],
-                ),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        },
-      );
-      final kategoris = await ApiService.getKategoris();
-      final mejas = widget.orderToEdit != null
-          ? await ApiService.getAllTables()
-          : await ApiService.getFreeTables();
-      setState(() {
-        _products = products;
-        _kategoris = kategoris;
-        _filteredProducts = products;
-        _mejas = mejas;
-        _isLoading = false;
-        _isBackgroundLoading = true;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
   }
 
   Future<void> _loadData() async {
@@ -457,6 +414,76 @@ class _KasirScreenState extends State<KasirScreen>
               const Icon(Icons.check_circle, color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Text('${product.namaProduk} ditambahkan'),
+            ],
+          ),
+          backgroundColor: Colors.green.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  Future<void> _editCartItemOptions(
+      int index, Map<String, dynamic> item) async {
+    final menuId = item['menu_id'] as int;
+    debugPrint('🔍 Edit opsi: menuId=$menuId, products=${_products.length}');
+
+    if (_products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data menu sedang dimuat, coba lagi...')),
+      );
+      return;
+    }
+
+    Product? product;
+    try {
+      product = _products.firstWhere((p) => p.id == menuId);
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Produk tidak ditemukan di daftar menu')),
+      );
+      return;
+    }
+
+    // FIX: jangan andalkan product.hasOptions — percayai flag di cart item
+    // product.hasOptions bisa false jika cache belum sinkron
+    if (product.optionGroups.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data opsi tidak tersedia, coba refresh menu'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final result = await OptionPickerDialog.show(
+      context,
+      product: product,
+      initialQty: item['qty'] as int,
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _selectedItems[index]['qty'] = result['qty'] as int;
+      _selectedItems[index]['option_item_ids'] =
+          result['option_item_ids'] as List<int>;
+      _selectedItems[index]['harga'] = result['harga_per_item'] as double;
+      _calculateTotals();
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Text('Opsi ${item['nama_produk']} diperbarui'),
             ],
           ),
           backgroundColor: Colors.green.shade700,
@@ -713,6 +740,13 @@ class _KasirScreenState extends State<KasirScreen>
       'total_harga': _totalHarga,
     };
 
+    debugPrint('📦 Items dikirim:');
+    for (var item in _selectedItems) {
+      debugPrint(
+          '  ${item['nama_produk']} → option_item_ids: ${item['option_item_ids']}');
+    }
+    debugPrint('📦 Full orderData: $orderData');
+
     final isEditing = widget.orderToEdit != null;
     final result = isEditing
         ? await ApiService.updateOrder(widget.orderToEdit!.id, orderData)
@@ -822,11 +856,44 @@ class _KasirScreenState extends State<KasirScreen>
         final found = _mejas.where((m) => m.id == _selectedMejaId);
         if (found.isNotEmpty) mejaNo = found.first.noMeja;
       }
+
+      // FIX: build items dengan label opsi untuk dicetak
+      final itemsForPrint = _selectedItems.map((item) {
+        final hasOptions = item['has_options'] == true;
+        String opsiLabel = '';
+
+        if (hasOptions) {
+          final menuId = item['menu_id'] as int;
+          final optionItemIds =
+              (item['option_item_ids'] as List?)?.cast<int>() ?? [];
+
+          if (optionItemIds.isNotEmpty) {
+            try {
+              final product = _products.firstWhere((p) => p.id == menuId);
+              final selectedNames = <String>[];
+              for (var group in product.optionGroups) {
+                for (var optItem in group.items) {
+                  if (optionItemIds.contains(optItem.id)) {
+                    selectedNames.add(optItem.nama);
+                  }
+                }
+              }
+              opsiLabel = selectedNames.join(', ');
+            } catch (_) {}
+          }
+        }
+
+        return {
+          ...item,
+          if (opsiLabel.isNotEmpty) 'opsi': opsiLabel,
+        };
+      }).toList();
+
       return await ThermalPrintService.printAll(
         orderId: orderData['id']?.toString() ?? '',
         tokoNama: tokoNama,
         tokoAlamat: tokoAlamat,
-        items: _selectedItems,
+        items: itemsForPrint, // ← pakai itemsForPrint, bukan _selectedItems
         totalHarga: _totalHarga,
         jenisOrder: _jenisOrder,
         mejaNo: mejaNo,
@@ -1148,7 +1215,8 @@ class _KasirScreenState extends State<KasirScreen>
                   ),
                   if (_totalItem > 0) ...[
                     ElevatedButton(
-                      onPressed: _showPaymentDialog,
+                      // FIX: sama, edit langsung simpan
+                      onPressed: isEditing ? _savePesanan : _showPaymentDialog,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
@@ -1160,9 +1228,11 @@ class _KasirScreenState extends State<KasirScreen>
                             borderRadius: BorderRadius.circular(10)),
                         elevation: 0,
                       ),
-                      child: const Text('Bayar',
-                          style: TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        isEditing ? 'Update' : 'Bayar',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ),
                     const SizedBox(width: 8),
                   ],
@@ -1335,7 +1405,8 @@ class _KasirScreenState extends State<KasirScreen>
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
-                onPressed: _showPaymentDialog,
+                // FIX: edit = langsung simpan, bukan lewat payment dialog
+                onPressed: isEditing ? _savePesanan : _showPaymentDialog,
                 icon: Icon(isEditing ? Icons.update : Icons.payment,
                     color: Colors.white),
                 label: Text(
@@ -1539,7 +1610,7 @@ class _KasirScreenState extends State<KasirScreen>
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _showPaymentDialog,
+                      onPressed: isEditing ? _savePesanan : _showPaymentDialog,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
@@ -1808,7 +1879,11 @@ class _KasirScreenState extends State<KasirScreen>
         const Text('Pilih Meja', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          initialValue: _selectedMejaId,
+          // FIX: pakai `value` (reactive) bukan `initialValue` (one-shot)
+          // null-safe: jika _mejas belum load, value = null (tidak crash)
+          initialValue: _mejas.any((m) => m.id == _selectedMejaId)
+              ? _selectedMejaId
+              : null,
           decoration: InputDecoration(
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             contentPadding:
@@ -1868,90 +1943,109 @@ class _KasirScreenState extends State<KasirScreen>
       children: _selectedItems.asMap().entries.map((entry) {
         final index = entry.key;
         final item = entry.value;
-
-        // Cari nama-nama opsi yang dipilih untuk ditampilkan
-        // (hanya tampil jika ada opsi)
         final hasOptions = item['has_options'] == true;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 6),
           elevation: 1,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item['nama_produk'],
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        _currencyFormat.format(item['harga']),
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade600),
-                      ),
-                      // BARU: tampilkan badge opsi jika ada
-                      if (hasOptions) ...[
-                        const SizedBox(height: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFe8eef5),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'Punya opsi',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF1a315b),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            // Highlight border untuk item yang punya opsi
+            side: hasOptions
+                ? BorderSide(
+                    color: _primaryColor.withValues(alpha: 0.35), width: 1.2)
+                : BorderSide.none,
+          ),
+          child: InkWell(
+            // Klik item untuk edit opsi (hanya jika punya opsi)
+            onTap: hasOptions ? () => _editCartItemOptions(index, item) : null,
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item['nama_produk'],
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        Text(
+                          _currencyFormat.format(item['harga']),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                        if (hasOptions) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFe8eef5),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.tune,
+                                        size: 10, color: Color(0xFF1a315b)),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Punya opsi · Ketuk untuk edit',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF1a315b),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildQtyButton(
+                          icon: Icons.remove,
+                          onTap: () => _updateQuantity(index, -1)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('${item['qty']}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15)),
+                      ),
+                      _buildQtyButton(
+                          icon: Icons.add,
+                          onTap: () => _updateQuantity(index, 1)),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => _removeFromCart(index),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: _primarySurface,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.delete_outline,
+                              color: _primaryColor, size: 18),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildQtyButton(
-                        icon: Icons.remove,
-                        onTap: () => _updateQuantity(index, -1)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('${item['qty']}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
-                    ),
-                    _buildQtyButton(
-                        icon: Icons.add,
-                        onTap: () => _updateQuantity(index, 1)),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => _removeFromCart(index),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: _primarySurface,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Icon(Icons.delete_outline,
-                            color: _primaryColor, size: 18),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

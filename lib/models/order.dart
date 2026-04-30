@@ -1,16 +1,11 @@
-// ============================================================
-// models/order.dart
-// PERUBAHAN: tambah SelectedOptionSnapshot + field opsiDipilih
-// di OrderItem untuk tampil di struk/riwayat
-// ============================================================
-
-// ── Snapshot opsi yang dipilih (untuk riwayat/struk) ────────
 class SelectedOptionSnapshot {
+  final int id;
   final String namaGroup;
   final String namaItem;
   final int hargaTambahan;
 
   const SelectedOptionSnapshot({
+    required this.id,
     required this.namaGroup,
     required this.namaItem,
     required this.hargaTambahan,
@@ -18,6 +13,7 @@ class SelectedOptionSnapshot {
 
   factory SelectedOptionSnapshot.fromJson(Map<String, dynamic> json) {
     return SelectedOptionSnapshot(
+      id: _parseInt(json['option_item_id'] ?? json['id']),
       namaGroup: json['nama_group']?.toString() ?? '',
       namaItem: json['nama_item']?.toString() ?? '',
       hargaTambahan: _parseInt(json['harga_tambahan']),
@@ -41,8 +37,6 @@ class OrderItem {
   final String menuNama;
   final int qty;
   final double harga;
-
-  // BARU: opsi yang dipilih untuk item ini
   final List<SelectedOptionSnapshot> opsiDipilih;
 
   OrderItem({
@@ -56,42 +50,58 @@ class OrderItem {
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
-    // Parse opsi jika ada
+    // Parse opsi — field dari formatOrder() Laravel adalah 'opsi_dipilih'
     final opsiList = (json['opsi_dipilih'] as List? ?? [])
         .map((o) => SelectedOptionSnapshot.fromJson(o as Map<String, dynamic>))
         .toList();
 
     return OrderItem(
-      id: json['id'],
-      orderId: json['order_id'] ?? 0,
-      menuId: json['menu_id'],
-      menuNama: json['menu']?['nama_produk']?.toString() ??
+      id: _parseInt(json['id']),
+      orderId: _parseInt(json['order_id'] ?? 0),
+      menuId: _parseInt(json['menu_id']),
+      menuNama: json['menu']
+              ?.toString() ?? // dari formatOrder: field 'menu' berisi string nama
           json['menu_nama']?.toString() ??
           '',
-      qty: int.parse(json['qty'].toString()),
-      harga: double.parse(json['harga'].toString()),
+      qty: _parseInt(json['qty']),
+      // PERBAIKAN: parse harga dengan robust — bisa string "25000" atau int 25000
+      harga: _parseDouble(json['harga']),
       opsiDipilih: opsiList,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'order_id': orderId,
-      'menu_id': menuId,
-      'qty': qty,
-      'harga': harga,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'order_id': orderId,
+        'menu_id': menuId,
+        'qty': qty,
+        'harga': harga,
+      };
 
-  // Total harga tambahan dari semua opsi yang dipilih
   int get totalHargaOpsi =>
       opsiDipilih.fold(0, (sum, o) => sum + o.hargaTambahan);
 
+  // PERBAIKAN: subtotal = qty × (harga dasar + total opsi)
   double get subtotal => qty * (harga + totalHargaOpsi);
 
-  // Label ringkas opsi untuk ditampilkan di UI (misal: "Jumbo, Extra Pedas")
   String get opsiLabel => opsiDipilih.map((o) => o.namaItem).join(', ');
+
+  // ── Helpers ─────────────────────────────────────────────────
+  static double _parseDouble(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
+  }
+
+  static int _parseInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
 }
 
 // ── Order ────────────────────────────────────────────────────
