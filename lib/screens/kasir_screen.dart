@@ -588,27 +588,135 @@ class _KasirScreenState extends State<KasirScreen>
                           style: TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      ..._selectedItems.map(
-                        (item) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          dense: false,
-                          title: Text(item['nama_produk'],
-                              style: const TextStyle(fontSize: 15)),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              '${item['qty']} x ${_currencyFormat.format(item['harga'])}',
-                              style: const TextStyle(fontSize: 14),
+                      ..._selectedItems.map((item) {
+                        final hasOptions = item['has_options'] == true;
+                        final optionItemIds =
+                            (item['option_item_ids'] as List?)?.cast<int>() ??
+                                [];
+                        final subtotal =
+                            (item['qty'] as int) * (item['harga'] as double);
+
+                        // Kumpulkan nama opsi yang dipilih
+                        final opsiLabels = <String>[];
+                        if (hasOptions && optionItemIds.isNotEmpty) {
+                          try {
+                            final menuId = item['menu_id'] as int;
+                            final product =
+                                _products.firstWhere((p) => p.id == menuId);
+                            for (var group in product.optionGroups) {
+                              for (var optItem in group.items) {
+                                if (optionItemIds.contains(optItem.id)) {
+                                  opsiLabels
+                                      .add('${group.nama}: ${optItem.nama}');
+                                }
+                              }
+                            }
+                          } catch (_) {}
+                        }
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: hasOptions
+                                  ? _primaryColor.withValues(alpha: 0.3)
+                                  : Colors.grey.shade200,
                             ),
                           ),
-                          trailing: Text(
-                            _currencyFormat.format((item['qty'] as int) *
-                                (item['harga'] as double)),
-                            style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w600),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Kiri: nama + qty x harga + sub-varian
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item['nama_produk'],
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${item['qty']} x ${_currencyFormat.format(item['harga'])}',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey.shade600),
+                                    ),
+                                    // ── Sub-varian ─────────────────────────────
+                                    if (opsiLabels.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFe8eef5),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: opsiLabels
+                                              .map((label) => Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            bottom: 2),
+                                                    child: Row(
+                                                      children: [
+                                                        Container(
+                                                          width: 4,
+                                                          height: 4,
+                                                          margin:
+                                                              const EdgeInsets
+                                                                  .only(
+                                                                  right: 6,
+                                                                  top: 2),
+                                                          decoration:
+                                                              const BoxDecoration(
+                                                            color: Color(
+                                                                0xFF1a315b),
+                                                            shape:
+                                                                BoxShape.circle,
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          label,
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 11,
+                                                            color: Color(
+                                                                0xFF1a315b),
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ))
+                                              .toList(),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              // Kanan: subtotal
+                              const SizedBox(width: 12),
+                              Text(
+                                _currencyFormat.format(subtotal),
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w600),
+                              ),
+                            ],
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                       const SizedBox(height: 20),
                       Text(
                         'Total: ${_currencyFormat.format(_totalHarga)}',

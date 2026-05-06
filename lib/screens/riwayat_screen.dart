@@ -21,7 +21,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
-  // Filters
   DateTime? _tanggalDari;
   DateTime? _tanggalSampai;
   int? _jenisOrderFilter;
@@ -50,63 +49,80 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     }
   }
 
+  // ✅ PERBAIKAN: Helper format tanggal konsisten — selalu kirim 'yyyy-MM-dd'
+  String? _formatDateParam(DateTime? date) =>
+      date != null ? DateFormat('yyyy-MM-dd').format(date) : null;
+
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _currentPage = 1;
+      _orders = [];
     });
 
-    try {
-      try {
-        final summaryResponse = await ApiService.getRiwayatSummary(
-          tanggalDari: _tanggalDari?.toIso8601String(),
-          tanggalSampai: _tanggalSampai?.toIso8601String(),
-        );
+    // ✅ PERBAIKAN: Validasi tanggal sebelum request
+    if (_tanggalDari != null &&
+        _tanggalSampai != null &&
+        _tanggalDari!.isAfter(_tanggalSampai!)) {
+      _showSnackBar('Tanggal awal tidak boleh melebihi tanggal akhir',
+          isError: true);
+      setState(() => _isLoading = false);
+      return;
+    }
 
-        if (summaryResponse['success']) {
-          setState(() {
-            _summary = RiwayatSummary.fromJson(summaryResponse['data']);
-          });
-        }
-      } catch (summaryError) {
-        debugPrint('⚠️ Summary error (non-critical): $summaryError');
+    try {
+      // Load summary & data secara paralel agar lebih cepat
+      final results = await Future.wait([
+        ApiService.getRiwayatSummary(
+          tanggalDari: _formatDateParam(_tanggalDari),
+          tanggalSampai: _formatDateParam(_tanggalSampai),
+        ).catchError((_) => <String, dynamic>{'success': false}),
+        ApiService.getRiwayat(
+          page: _currentPage,
+          tanggalDari: _formatDateParam(_tanggalDari),
+          tanggalSampai: _formatDateParam(_tanggalSampai),
+          jenisOrder: _jenisOrderFilter,
+          metodePembayaran: _metodePembayaranFilter,
+          search: _searchController.text.trim().isNotEmpty
+              ? _searchController.text.trim()
+              : null,
+        ),
+      ]);
+
+      if (!mounted) return;
+
+      final summaryRes = results[0];
+      final riwayatRes = results[1];
+
+      // ✅ PERBAIKAN: Cek key 'success' dengan fallback false
+      if (summaryRes['success'] == true && summaryRes['data'] != null) {
+        setState(() => _summary = RiwayatSummary.fromJson(summaryRes['data']));
       }
 
-      final response = await ApiService.getRiwayat(
-        page: _currentPage,
-        tanggalDari: _tanggalDari?.toIso8601String().split('T')[0],
-        tanggalSampai: _tanggalSampai?.toIso8601String().split('T')[0],
-        jenisOrder: _jenisOrderFilter,
-        metodePembayaran: _metodePembayaranFilter,
-        search:
-            _searchController.text.isNotEmpty ? _searchController.text : null,
-      );
-
-      if (response['success']) {
-        final List<dynamic> data = response['data'];
-        final meta = response['meta'];
-
+      if (riwayatRes['success'] == true) {
+        final List<dynamic> data = riwayatRes['data'] ?? [];
+        final meta = riwayatRes['meta'] ?? {};
         setState(() {
           _orders = data.map((json) => History.fromJson(json)).toList();
-          _lastPage = meta['last_page'];
+          _lastPage = meta['last_page'] ?? 1;
           _isLoading = false;
         });
+      } else {
+        // ✅ PERBAIKAN: Tampilkan pesan error dari server jika ada
+        setState(() => _isLoading = false);
+        _showSnackBar(riwayatRes['message'] ?? 'Gagal memuat data',
+            isError: true);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: const Color(0xFF1a315b),
-          ),
-        );
-      }
+      _showSnackBar('Gagal terhubung ke server', isError: true);
     }
   }
 
   Future<void> _loadMoreData() async {
-    if (_isLoadingMore) return;
+    if (_isLoadingMore || _currentPage >= _lastPage) return;
 
     setState(() {
       _isLoadingMore = true;
@@ -116,27 +132,54 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     try {
       final response = await ApiService.getRiwayat(
         page: _currentPage,
-        tanggalDari: _tanggalDari?.toIso8601String().split('T')[0],
-        tanggalSampai: _tanggalSampai?.toIso8601String().split('T')[0],
+        tanggalDari: _formatDateParam(_tanggalDari),
+        tanggalSampai: _formatDateParam(_tanggalSampai),
         jenisOrder: _jenisOrderFilter,
         metodePembayaran: _metodePembayaranFilter,
-        search:
-            _searchController.text.isNotEmpty ? _searchController.text : null,
+        search: _searchController.text.trim().isNotEmpty
+            ? _searchController.text.trim()
+            : null,
       );
 
-      if (response['success']) {
-        final List<dynamic> data = response['data'];
+      if (!mounted) return;
+
+      if (response['success'] == true) {
+        final List<dynamic> data = response['data'] ?? [];
         setState(() {
           _orders.addAll(data.map((json) => History.fromJson(json)).toList());
           _isLoadingMore = false;
         });
+      } else {
+        // ✅ PERBAIKAN: Rollback page dan tampilkan pesan
+        setState(() {
+          _isLoadingMore = false;
+          _currentPage--;
+        });
+        _showSnackBar('Gagal memuat halaman berikutnya', isError: true);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingMore = false;
         _currentPage--;
       });
+      _showSnackBar('Gagal terhubung ke server', isError: true);
     }
+  }
+
+  // ✅ PERBAIKAN: Sentralisasi SnackBar
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            isError ? const Color(0xFFB71C1C) : const Color(0xFF1B5E20),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   void _showFilterDialog() {
@@ -174,11 +217,10 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
   }
 
   String _formatRupiah(double amount) {
-    final formatted = amount.toStringAsFixed(0);
-    return 'Rp${formatted.replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    )}';
+    return 'Rp${amount.toStringAsFixed(0).replaceAllMapped(
+          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        )}';
   }
 
   @override
@@ -254,34 +296,20 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildSummaryItem(
-                'Total Transaksi',
-                _summary!.totalTransaksi.toString(),
-                Icons.receipt_long,
-              ),
-              _buildSummaryItem(
-                'Total Pendapatan',
-                _formatRupiah(_summary!.totalPendapatan),
-                Icons.attach_money,
-              ),
+              _buildSummaryItem('Total Transaksi',
+                  _summary!.totalTransaksi.toString(), Icons.receipt_long),
+              _buildSummaryItem('Total Pendapatan',
+                  _formatRupiah(_summary!.totalPendapatan), Icons.attach_money),
             ],
           ),
           const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildSummaryItem(
-                'Cash',
-                _formatRupiah(_summary!.totalCash),
-                Icons.payments,
-              ),
-              _buildSummaryItem(
-                'Transfer',
-                _formatRupiah(_summary!.totalTransfer),
-                Icons.credit_card,
-              ),
+                  'Cash', _formatRupiah(_summary!.totalCash), Icons.payments),
+              _buildSummaryItem('Transfer',
+                  _formatRupiah(_summary!.totalTransfer), Icons.credit_card),
             ],
           ),
         ],
@@ -298,21 +326,16 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
             children: [
               Icon(icon, color: Colors.white70, size: 16),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
+              Text(label,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -326,9 +349,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-          ),
+              color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
         ],
       ),
       child: Row(
@@ -342,17 +363,15 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
               controller: _searchController,
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _loadData(),
+              // ✅ PERBAIKAN: Batasi panjang input search
+              maxLength: 100,
               decoration: InputDecoration(
-                hintText: 'Cari kode order atau nama...',
-                hintStyle: TextStyle(
-                  color: Colors.grey.shade400,
-                  fontSize: 14,
-                ),
+                hintText: 'Cari kode order atau catatan...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 14,
-                ),
+                counterText: '', // sembunyikan counter maxLength
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
               ),
             ),
           ),
@@ -364,23 +383,15 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                 backgroundColor: const Color(0xFF1a315b),
                 foregroundColor: Colors.white,
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 10,
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                    borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text(
-                'Cari',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
+              child: const Text('Cari',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             ),
           ),
         ],
@@ -408,21 +419,13 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          order.kodeOrder,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
+                        Text(order.kodeOrder,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 4),
-                        Text(
-                          order.tanggalDisplay,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text(order.tanggalDisplay,
+                            style: TextStyle(
+                                color: Colors.grey.shade600, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -455,10 +458,8 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        order.namaCustomer,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
+                      Text(order.namaCustomer,
+                          style: const TextStyle(fontWeight: FontWeight.w500)),
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -470,22 +471,15 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                             color: Colors.grey.shade600,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            order.jenisOrderText,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 12,
-                            ),
-                          ),
+                          Text(order.jenisOrderText,
+                              style: TextStyle(
+                                  color: Colors.grey.shade600, fontSize: 12)),
                           if (order.meja != null) ...[
                             const SizedBox(width: 8),
-                            Text(
-                              '• Meja ${order.meja!.nomorMeja}',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 12,
-                              ),
-                            ),
+                            // ✅ PERBAIKAN: pakai nomorMeja (konsisten dengan model)
+                            Text('• Meja ${order.meja!.nomorMeja}',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12)),
                           ],
                         ],
                       ),
@@ -494,10 +488,9 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   Text(
                     _formatRupiah(order.totalHarga),
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1a315b),
-                    ),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1a315b)),
                   ),
                 ],
               ),
@@ -518,10 +511,14 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
           Text(
             'Belum ada riwayat transaksi',
             style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.w500,
-            ),
+                fontSize: 18,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Coba ubah filter tanggal',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
           ),
         ],
       ),
@@ -533,8 +530,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.7,
         maxChildSize: 0.9,
@@ -551,24 +547,17 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)),
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
-                order.kodeOrder,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text(order.kodeOrder,
+                  style: const TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(
-                order.tanggalDisplay,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
+              Text(order.tanggalDisplay,
+                  style: TextStyle(color: Colors.grey.shade600)),
               const Divider(height: 32),
               _buildDetailRow('Customer', order.namaCustomer),
               _buildDetailRow('Jenis Order', order.jenisOrderText),
@@ -577,59 +566,47 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
               _buildDetailRow('Pembayaran', order.metodePembayaranText),
               if (order.kasir != null) _buildDetailRow('Kasir', order.kasir!),
               const SizedBox(height: 24),
-              const Text(
-                'Item Pesanan',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              const Text('Item Pesanan',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              ...order.items.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.menuNama,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                            Text(
-                              '${item.qty}x ${_formatRupiah(item.harga)}',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+              ...order.items.map((item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item.menuNama,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w500)),
+                              Text('${item.qty}x ${_formatRupiah(item.harga)}',
+                                  style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12)),
+                            ],
+                          ),
                         ),
-                      ),
-                      Text(
-                        _formatRupiah(item.subtotal),
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+                        Text(_formatRupiah(item.subtotal),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  )),
               const Divider(height: 32),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'TOTAL',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
+                  const Text('TOTAL',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   Text(
                     _formatRupiah(order.totalHarga),
                     style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1a315b),
-                    ),
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1a315b)),
                   ),
                 ],
               ),
@@ -654,6 +631,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
   }
 }
 
+// ── Filter Bottom Sheet ───────────────────────────────────────────
 class _FilterBottomSheet extends StatefulWidget {
   final DateTime? tanggalDari;
   final DateTime? tanggalSampai;
@@ -680,6 +658,8 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
   DateTime? _tanggalSampai;
   int? _jenisOrder;
   int? _metodePembayaran;
+  // ✅ TAMBAHAN: error message untuk validasi tanggal
+  String? _tanggalError;
 
   @override
   void initState() {
@@ -691,21 +671,46 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
   }
 
   Future<void> _selectDate(bool isDari) async {
+    final initial = isDari
+        ? (_tanggalDari ?? DateTime.now())
+        : (_tanggalSampai ?? _tanggalDari ?? DateTime.now());
+
     final date = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: initial,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
     );
-    if (date != null) {
-      setState(() {
-        if (isDari) {
-          _tanggalDari = date;
-        } else {
+
+    if (date == null) return;
+
+    setState(() {
+      if (isDari) {
+        _tanggalDari = date;
+        // ✅ PERBAIKAN: Reset tanggal akhir jika lebih awal dari tanggal baru
+        if (_tanggalSampai != null && _tanggalSampai!.isBefore(date)) {
           _tanggalSampai = date;
         }
-      });
+      } else {
+        _tanggalSampai = date;
+      }
+      // Hapus error setelah dipilih ulang
+      _tanggalError = null;
+    });
+  }
+
+  void _onApply() {
+    // ✅ PERBAIKAN: Validasi tanggal sebelum apply
+    if (_tanggalDari != null &&
+        _tanggalSampai != null &&
+        _tanggalDari!.isAfter(_tanggalSampai!)) {
+      setState(() =>
+          _tanggalError = 'Tanggal awal tidak boleh melebihi tanggal akhir');
+      return;
     }
+    widget.onApply(
+        _tanggalDari, _tanggalSampai, _jenisOrder, _metodePembayaran);
+    Navigator.pop(context);
   }
 
   @override
@@ -724,10 +729,8 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Filter',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
+              const Text('Filter',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               TextButton(
                 onPressed: () {
                   widget.onReset();
@@ -746,11 +749,9 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
                 child: OutlinedButton.icon(
                   onPressed: () => _selectDate(true),
                   icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(
-                    _tanggalDari != null
-                        ? DateFormat('dd/MM/yyyy').format(_tanggalDari!)
-                        : 'Dari',
-                  ),
+                  label: Text(_tanggalDari != null
+                      ? DateFormat('dd/MM/yyyy').format(_tanggalDari!)
+                      : 'Dari'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -758,15 +759,19 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
                 child: OutlinedButton.icon(
                   onPressed: () => _selectDate(false),
                   icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(
-                    _tanggalSampai != null
-                        ? DateFormat('dd/MM/yyyy').format(_tanggalSampai!)
-                        : 'Sampai',
-                  ),
+                  label: Text(_tanggalSampai != null
+                      ? DateFormat('dd/MM/yyyy').format(_tanggalSampai!)
+                      : 'Sampai'),
                 ),
               ),
             ],
           ),
+          // ✅ TAMBAHAN: Tampilkan error validasi tanggal
+          if (_tanggalError != null) ...[
+            const SizedBox(height: 6),
+            Text(_tanggalError!,
+                style: const TextStyle(color: Colors.red, fontSize: 12)),
+          ],
           const SizedBox(height: 24),
           const Text('Jenis Order',
               style: TextStyle(fontWeight: FontWeight.w600)),
@@ -777,17 +782,17 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
               FilterChip(
                 label: const Text('Semua'),
                 selected: _jenisOrder == null,
-                onSelected: (selected) => setState(() => _jenisOrder = null),
+                onSelected: (_) => setState(() => _jenisOrder = null),
               ),
               FilterChip(
                 label: const Text('Dine In'),
                 selected: _jenisOrder == 1,
-                onSelected: (selected) => setState(() => _jenisOrder = 1),
+                onSelected: (_) => setState(() => _jenisOrder = 1),
               ),
               FilterChip(
                 label: const Text('Take Away'),
                 selected: _jenisOrder == 2,
-                onSelected: (selected) => setState(() => _jenisOrder = 2),
+                onSelected: (_) => setState(() => _jenisOrder = 2),
               ),
             ],
           ),
@@ -801,18 +806,17 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
               FilterChip(
                 label: const Text('Semua'),
                 selected: _metodePembayaran == null,
-                onSelected: (selected) =>
-                    setState(() => _metodePembayaran = null),
+                onSelected: (_) => setState(() => _metodePembayaran = null),
               ),
               FilterChip(
                 label: const Text('Cash'),
                 selected: _metodePembayaran == 1,
-                onSelected: (selected) => setState(() => _metodePembayaran = 1),
+                onSelected: (_) => setState(() => _metodePembayaran = 1),
               ),
               FilterChip(
                 label: const Text('Transfer'),
                 selected: _metodePembayaran == 2,
-                onSelected: (selected) => setState(() => _metodePembayaran = 2),
+                onSelected: (_) => setState(() => _metodePembayaran = 2),
               ),
             ],
           ),
@@ -820,22 +824,13 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
-                widget.onApply(
-                  _tanggalDari,
-                  _tanggalSampai,
-                  _jenisOrder,
-                  _metodePembayaran,
-                );
-                Navigator.pop(context);
-              },
+              onPressed: _onApply,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1a315b),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Terapkan Filter'),
             ),

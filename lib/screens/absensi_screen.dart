@@ -71,41 +71,46 @@ class _AbsensiScreenState extends State<AbsensiScreen>
     setState(() => loading = true);
 
     try {
+      // Step 1: Auth → dapat absen_token
       final auth = await AbsensiService.auth(
         userId: userId,
         password: password,
       );
 
-      if (!auth['success']) {
+      if (auth['success'] != true) {
         _msg(auth['message'] ?? 'Password salah', isError: true);
-        setState(() => loading = false);
         return;
       }
 
+      // Ambil absen_token dari response auth
+      final String absenToken = auth['absen_token'];
+
+      // Step 2: Ambil GPS
       final pos = await _getLocation();
 
+      // Step 3: checkIn/checkOut pakai absen_token, bukan userId
       final res = isCheckIn
           ? await AbsensiService.checkIn(
-              userId: userId,
+              absenToken: absenToken,
               latitude: pos.latitude,
               longitude: pos.longitude,
             )
           : await AbsensiService.checkOut(
-              userId: userId,
+              absenToken: absenToken,
               latitude: pos.latitude,
               longitude: pos.longitude,
             );
 
-      if (!isCheckIn && (res['success'] == true)) {
+      if (!isCheckIn && res['success'] == true) {
         setState(() => checkoutStatus[userId] = true);
       }
 
       _msg(res['message'] ?? 'Berhasil');
     } catch (e) {
       _msg('Gagal: $e', isError: true);
+    } finally {
+      setState(() => loading = false);
     }
-
-    setState(() => loading = false);
   }
 
   void _msg(String m, {bool isError = false}) {
