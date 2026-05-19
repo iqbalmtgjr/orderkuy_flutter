@@ -23,11 +23,11 @@ class ShiftScreen extends StatefulWidget {
       onShiftOpened;
 
   const ShiftScreen({
-    Key? key,
+    super.key,
     required this.tokoId,
     required this.userId,
     this.onShiftOpened,
-  }) : super(key: key);
+  });
 
   @override
   State<ShiftScreen> createState() => _ShiftScreenState();
