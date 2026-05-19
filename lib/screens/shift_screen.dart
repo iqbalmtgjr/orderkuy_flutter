@@ -3,45 +3,70 @@ import 'package:flutter/services.dart';
 import '../services/shift_service.dart';
 
 // ─────────────────────────────────────────────────────────────
-// ShiftScreen
-// Dipakai untuk 2 kondisi:
-//   1. Belum ada shift aktif → tampil form buka shift
-//   2. Shift sudah aktif     → tampil ringkasan + aksi
-//
-// Cara pakai:
-//   Navigator.push(context, MaterialPageRoute(
-//     builder: (_) => ShiftScreen(tokoId: tokoId, userId: userId),
-//   ));
+// Tema Warna Global
 // ─────────────────────────────────────────────────────────────
+class _C {
+  static const primary = Color(0xFF1a315b);
+  static const primaryDark = Color(0xFF0f2442);
+  static const primarySurface = Color(0xFFe8eef5);
+  static const accent = Color(0xFF2E6BE6);
+  static const accentLight = Color(0xFFD6E4FF);
+  static const success = Color(0xFF1D9E75);
+  static const successLight = Color(0xFFE6F7F2);
+  static const warning = Color(0xFFBA7517);
+  static const warningLight = Color(0xFFFFF4E0);
+  static const danger = Color(0xFFA32D2D);
+  static const dangerLight = Color(0xFFFCEBEB);
+  static const bg = Color(0xFFF4F7FC);
+  static const card = Colors.white;
+  static const textMain = Color(0xFF0f2442);
+  static const textSub = Color(0xFF7A8CA0);
+  static const divider = Color(0xFFE8EEF5);
+}
 
+// ─────────────────────────────────────────────────────────────
+// ShiftScreen
+// ─────────────────────────────────────────────────────────────
 class ShiftScreen extends StatefulWidget {
   final int tokoId;
   final int userId;
-
-  // Callback saat shift berhasil dibuka — kirim data user & shift ke parent
   final void Function(Map<String, dynamic> user, Map<String, dynamic> shift)?
       onShiftOpened;
+  final VoidCallback? onShiftClosed;
 
   const ShiftScreen({
     super.key,
     required this.tokoId,
     required this.userId,
     this.onShiftOpened,
+    this.onShiftClosed,
   });
 
   @override
   State<ShiftScreen> createState() => _ShiftScreenState();
 }
 
-class _ShiftScreenState extends State<ShiftScreen> {
+class _ShiftScreenState extends State<ShiftScreen>
+    with SingleTickerProviderStateMixin {
   bool _loading = true;
   bool _shiftAktif = false;
   Map<String, dynamic>? _shift;
+  late AnimationController _animCtrl;
+  late Animation<double> _fadeAnim;
 
   @override
   void initState() {
     super.initState();
+    _animCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 400));
+    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _cekShift();
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _cekShift() async {
@@ -56,6 +81,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
         _shift = res['shift'];
         _loading = false;
       });
+      _animCtrl.forward(from: 0);
     } catch (_) {
       setState(() => _loading = false);
     }
@@ -63,25 +89,68 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: Text(_shiftAktif ? 'Shift Aktif' : 'Buka Shift'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0.5,
-      ),
-      body: _shiftAktif ? _buildShiftAktif() : _buildBukaShift(),
+      backgroundColor: _C.bg,
+      extendBodyBehindAppBar: true,
+      appBar: _buildAppBar(),
+      body: _loading
+          ? _buildLoading()
+          : FadeTransition(
+              opacity: _fadeAnim,
+              child: _shiftAktif ? _buildShiftAktif() : _buildBukaShift(),
+            ),
     );
   }
 
-  // ── Halaman buka shift ─────────────────────────────────
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      systemOverlayStyle: SystemUiOverlayStyle.light,
+      leading: IconButton(
+        icon: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 15),
+        ),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: Text(
+        _shiftAktif ? 'Shift Aktif' : 'Buka Shift',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
+      ),
+      centerTitle: true,
+    );
+  }
+
+  Widget _buildLoading() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_C.primaryDark, _C.primary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: const Center(
+        child: CircularProgressIndicator(
+          color: Colors.white,
+          strokeWidth: 2,
+        ),
+      ),
+    );
+  }
+
   Widget _buildBukaShift() {
     return _BukaShiftForm(
       tokoId: widget.tokoId,
@@ -90,12 +159,12 @@ class _ShiftScreenState extends State<ShiftScreen> {
           _shiftAktif = true;
           _shift = shift;
         });
+        _animCtrl.forward(from: 0);
         widget.onShiftOpened?.call(user, shift);
       },
     );
   }
 
-  // ── Halaman shift aktif ────────────────────────────────
   Widget _buildShiftAktif() {
     return _ShiftAktifView(
       shift: _shift!,
@@ -105,10 +174,124 @@ class _ShiftScreenState extends State<ShiftScreen> {
           _shiftAktif = false;
           _shift = null;
         });
+        _animCtrl.forward(from: 0);
+        widget.onShiftClosed?.call(); // ← beritahu dashboard shift sudah tutup
       },
       onRefresh: _cekShift,
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Responsive helpers
+// ─────────────────────────────────────────────────────────────
+
+/// Tablet = lebar layar >= 600dp
+bool _isTablet(BuildContext context) =>
+    MediaQuery.of(context).size.shortestSide >= 600;
+
+/// Horizontal padding konten — lebih lebar di tablet
+double _hPad(BuildContext context) => _isTablet(context) ? 40.0 : 20.0;
+
+/// Max-width konten supaya di tablet tidak terlalu melebar
+double _maxContentWidth(BuildContext context) =>
+    _isTablet(context) ? 680.0 : double.infinity;
+
+// ─────────────────────────────────────────────────────────────
+// Header biru dengan kurva bawah — tinggi auto (wrap content)
+// ─────────────────────────────────────────────────────────────
+class _BlueHeader extends StatelessWidget {
+  final Widget child;
+
+  // height dihapus — sekarang menyesuaikan konten secara otomatis
+  const _BlueHeader({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isTablet = _isTablet(context);
+    final screenW = MediaQuery.of(context).size.width;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Background gradient — wraps child
+        Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [_C.primaryDark, Color(0xFF1e3a6e)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              // Dekor lingkaran — ukuran relative terhadap lebar layar
+              Positioned(
+                  top: -screenW * 0.1,
+                  right: -screenW * 0.04,
+                  child: _circle(screenW * 0.28, 0.05)),
+              Positioned(
+                  top: screenW * 0.1,
+                  right: screenW * 0.1,
+                  child: _circle(screenW * 0.08, 0.06)),
+              Positioned(
+                  bottom: 40,
+                  left: -screenW * 0.03,
+                  child: _circle(screenW * 0.12, 0.04)),
+              // Konten
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  // Padding bawah ekstra untuk ruang kurva
+                  padding: EdgeInsets.only(bottom: isTablet ? 40.0 : 32.0),
+                  child: child,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Kurva bg di bawah — tinggi relative
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: CustomPaint(
+            size: Size(double.infinity, isTablet ? 40.0 : 32.0),
+            painter: _BottomCurvePainter(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _circle(double size, double opacity) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withOpacity(opacity),
+        ),
+      );
+}
+
+// Painter kurva bawah header — mengisi dengan warna bg
+class _BottomCurvePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = _C.bg;
+    final path = Path();
+    path.moveTo(0, size.height);
+    path.quadraticBezierTo(size.width / 2, 0, size.width, size.height);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -133,18 +316,24 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
   bool _pinVisible = false;
   String? _error;
 
+  @override
+  void dispose() {
+    _pinCtrl.dispose();
+    _nominalCtrl.dispose();
+    _catatanCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _buka() async {
     if (_pinCtrl.text.isEmpty) {
       setState(() => _error = 'PIN wajib diisi');
       return;
     }
     final nominal = int.tryParse(_nominalCtrl.text.replaceAll('.', '')) ?? 0;
-
     setState(() {
       _loading = true;
       _error = null;
     });
-
     try {
       final res = await ShiftService.bukaShift(
         tokoId: widget.tokoId,
@@ -152,7 +341,6 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
         openAmount: nominal,
         catatanBuka: _catatanCtrl.text.isNotEmpty ? _catatanCtrl.text : null,
       );
-
       if (res['success'] == true) {
         widget.onBerhasil(res['user'], res['shift']);
       } else {
@@ -167,135 +355,131 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = _isTablet(context);
+    final hp = _hPad(context);
+    final iconSize = isTablet ? 72.0 : 60.0;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 16),
-
-          // Ilustrasi
-          const Icon(Icons.store_outlined, size: 64, color: Color(0xFF534AB7)),
-          const SizedBox(height: 8),
-          const Text(
-            'Buka shift kasir',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Masukkan PIN dan uang awal di laci kasir',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.black54),
-          ),
-          const SizedBox(height: 32),
-
-          // PIN
-          _label('PIN Kasir'),
-          TextField(
-            controller: _pinCtrl,
-            obscureText: !_pinVisible,
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-            decoration: InputDecoration(
-              hintText: 'Masukkan PIN',
-              counterText: '',
-              suffixIcon: IconButton(
-                icon:
-                    Icon(_pinVisible ? Icons.visibility_off : Icons.visibility),
-                onPressed: () => setState(() => _pinVisible = !_pinVisible),
+          _BlueHeader(
+            child: Center(
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxWidth: _maxContentWidth(context)),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: hp, vertical: isTablet ? 32 : 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: iconSize,
+                        height: iconSize,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.12),
+                          borderRadius:
+                              BorderRadius.circular(isTablet ? 22 : 18),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.25), width: 1),
+                        ),
+                        child: Icon(Icons.store_rounded,
+                            color: Colors.white, size: isTablet ? 34 : 28),
+                      ),
+                      SizedBox(height: isTablet ? 16 : 12),
+                      Text(
+                        'Buka Shift Kasir',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isTablet ? 22 : 19,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Masukkan PIN dan uang awal di laci',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.55),
+                          fontSize: isTablet ? 13 : 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              filled: true,
-              fillColor: Colors.white,
             ),
           ),
-          const SizedBox(height: 16),
-
-          // Uang awal
-          _label('Uang Awal di Laci (Rp)'),
-          TextField(
-            controller: _nominalCtrl,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              hintText: '0',
-              prefixText: 'Rp ',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(10))),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Catatan
-          _label('Catatan (opsional)'),
-          TextField(
-            controller: _catatanCtrl,
-            decoration: const InputDecoration(
-              hintText: 'Open kasir pagi',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(10))),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Error
-          if (_error != null) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFCEBEB),
-                borderRadius: BorderRadius.circular(8),
+          Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: _maxContentWidth(context)),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(hp, 24, hp, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildFieldLabel('PIN Kasir'),
+                    _buildTextField(
+                      controller: _pinCtrl,
+                      hint: 'Masukkan PIN',
+                      obscure: !_pinVisible,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      prefix: const Icon(Icons.lock_outline_rounded,
+                          color: _C.primary, size: 18),
+                      suffix: IconButton(
+                        icon: Icon(
+                          _pinVisible
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: _C.textSub,
+                          size: 18,
+                        ),
+                        onPressed: () =>
+                            setState(() => _pinVisible = !_pinVisible),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _buildFieldLabel('Uang Awal di Laci'),
+                    _buildTextField(
+                      controller: _nominalCtrl,
+                      hint: '0',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      prefix: _rpPrefix(_C.primary),
+                    ),
+                    const SizedBox(height: 14),
+                    _buildFieldLabel('Catatan (opsional)'),
+                    _buildTextField(
+                      controller: _catatanCtrl,
+                      hint: 'Open kasir pagi',
+                      prefix: const Icon(Icons.notes_rounded,
+                          color: _C.primary, size: 18),
+                    ),
+                    const SizedBox(height: 20),
+                    if (_error != null) ...[
+                      _buildErrorBox(_error!),
+                      const SizedBox(height: 14),
+                    ],
+                    _buildPrimaryButton(
+                      label: 'Buka Shift',
+                      icon: Icons.play_circle_outline_rounded,
+                      loading: _loading,
+                      onTap: _buka,
+                    ),
+                  ],
+                ),
               ),
-              child: Text(_error!,
-                  style:
-                      const TextStyle(color: Color(0xFFA32D2D), fontSize: 13)),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // Tombol buka
-          SizedBox(
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _loading ? null : _buka,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF534AB7),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Text('Buka Shift',
-                      style: TextStyle(fontSize: 16, color: Colors.white)),
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text,
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87)),
-      );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Shift Aktif View — ringkasan + aksi
+// Shift Aktif View — PERBAIKAN UTAMA
 // ─────────────────────────────────────────────────────────────
 class _ShiftAktifView extends StatelessWidget {
   final Map<String, dynamic> shift;
@@ -312,224 +496,217 @@ class _ShiftAktifView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Info shift aktif
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEEDFE),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  const Icon(Icons.radio_button_checked,
-                      color: Color(0xFF534AB7), size: 16),
-                  const SizedBox(width: 6),
-                  const Text('Shift Aktif',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF534AB7))),
-                  const Spacer(),
-                  Text(shift['opened_at'] ?? '',
-                      style: const TextStyle(
-                          fontSize: 12, color: Color(0xFF534AB7))),
-                ]),
-                const SizedBox(height: 12),
-                _infoRow('Kasir', shift['kasir_nama'] ?? '-'),
-                _infoRow('Kas Awal', 'Rp ${_fmt(shift['open_amount'])}'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
+    final isTablet = _isTablet(context);
+    final hp = _hPad(context);
 
-          // Tombol aksi
-          _actionButton(
-            context,
-            icon: Icons.add_circle_outline,
-            label: 'Tambah Uang Kasir',
-            color: const Color(0xFF1D9E75),
-            onTap: () => _showKasDialog(context, 'in'),
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // ── Header responsif ────────────────────────────
+          _BlueHeader(
+            child: Center(
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxWidth: _maxContentWidth(context)),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      hp, isTablet ? 24 : 12, hp, isTablet ? 24 : 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Badge SHIFT AKTIF
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1D9E75).withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: const Color(0xFF1D9E75).withOpacity(0.4),
+                              width: 0.8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.circle,
+                                color: Color(0xFF4ECFA8), size: 7),
+                            SizedBox(width: 6),
+                            Text(
+                              'SHIFT AKTIF',
+                              style: TextStyle(
+                                color: Color(0xFF4ECFA8),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: isTablet ? 12 : 10),
+                      Text(
+                        shift['kasir_nama'] ?? '-',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isTablet ? 26 : 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        shift['opened_at'] ?? '',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.45),
+                          fontSize: isTablet ? 13 : 11,
+                        ),
+                      ),
+                      SizedBox(height: isTablet ? 16 : 14),
+                      // Chip kas awal
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: isTablet ? 18 : 14,
+                            vertical: isTablet ? 10 : 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.18),
+                              width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.account_balance_wallet_outlined,
+                                color: Colors.white.withOpacity(0.7),
+                                size: isTablet ? 16 : 14),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Kas Awal  Rp ${_fmt(shift['open_amount'])}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: isTablet ? 14 : 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 10),
-          _actionButton(
-            context,
-            icon: Icons.remove_circle_outline,
-            label: 'Kurangi Uang Kasir',
-            color: const Color(0xFFBA7517),
-            onTap: () => _showKasDialog(context, 'out'),
-          ),
-          const SizedBox(height: 10),
-          _actionButton(
-            context,
-            icon: Icons.person_outline,
-            label: 'Ganti Kasir',
-            color: const Color(0xFF185FA5),
-            onTap: () => _showGantiKasirDialog(context),
-          ),
-          const SizedBox(height: 10),
-          _actionButton(
-            context,
-            icon: Icons.lock_outline,
-            label: 'Tutup Shift',
-            color: const Color(0xFFA32D2D),
-            onTap: () => _showTutupDialog(context),
+
+          // ── Konten aksi responsif ───────────────────────
+          Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: _maxContentWidth(context)),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(hp, 16, hp, 32),
+                child: Column(
+                  children: [
+                    _buildActionTile(
+                      context,
+                      icon: Icons.add_circle_outline_rounded,
+                      label: 'Tambah Uang Kasir',
+                      desc: 'Setor kas ke laci kasir',
+                      color: _C.success,
+                      bgColor: _C.successLight,
+                      onTap: () => _showKasDialog(context, 'in'),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildActionTile(
+                      context,
+                      icon: Icons.remove_circle_outline_rounded,
+                      label: 'Kurangi Uang Kasir',
+                      desc: 'Ambil kas dari laci kasir',
+                      color: _C.warning,
+                      bgColor: _C.warningLight,
+                      onTap: () => _showKasDialog(context, 'out'),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildActionTile(
+                      context,
+                      icon: Icons.swap_horiz_rounded,
+                      label: 'Ganti Kasir',
+                      desc: 'Shift tetap berjalan',
+                      color: _C.accent,
+                      bgColor: _C.accentLight,
+                      onTap: () => _showGantiKasirDialog(context),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTutupButton(context),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _infoRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(children: [
-          Text('$label: ',
-              style: const TextStyle(fontSize: 13, color: Colors.black54)),
-          Text(value,
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        ]),
-      );
-
-  Widget _actionButton(
-    BuildContext ctx, {
+  Widget _buildActionTile(
+    BuildContext context, {
     required IconData icon,
     required String label,
+    required String desc,
     required Color color,
+    required Color bgColor,
     required VoidCallback onTap,
   }) {
+    final isTablet = _isTablet(context);
     return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
+      color: _C.card,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(width: 12),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 15, color: color, fontWeight: FontWeight.w500)),
-            const Spacer(),
-            Icon(Icons.chevron_right, color: color.withOpacity(0.5)),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  // ── Dialog Tambah/Kurang Kas ───────────────────────────
-  void _showKasDialog(BuildContext context, String type) {
-    final pinCtrl = TextEditingController();
-    final nominalCtrl = TextEditingController();
-    final ketCtrl = TextEditingController();
-    bool loading = false;
-    String? error;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              left: 20,
-              right: 20,
-              top: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: isTablet ? 18 : 14, vertical: isTablet ? 16 : 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _C.divider, width: 0.8),
+          ),
+          child: Row(
             children: [
-              Text(
-                type == 'in' ? 'Tambah Uang Kasir' : 'Kurangi Uang Kasir',
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                  controller: pinCtrl,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: 'PIN Kasir', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: nominalCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                      labelText: 'Jumlah (Rp)',
-                      prefixText: 'Rp ',
-                      border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: ketCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Keterangan (opsional)',
-                      border: OutlineInputBorder())),
-              if (error != null) ...[
-                const SizedBox(height: 8),
-                Text(error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 13)),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: loading
-                    ? null
-                    : () async {
-                        setS(() {
-                          loading = true;
-                          error = null;
-                        });
-                        try {
-                          final res = await ShiftService.tambahKas(
-                            shiftId: shift['id'],
-                            pin: pinCtrl.text,
-                            type: type,
-                            jumlah: int.tryParse(nominalCtrl.text) ?? 0,
-                            keterangan:
-                                ketCtrl.text.isNotEmpty ? ketCtrl.text : null,
-                          );
-                          if (res['success'] == true) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text(res['message']),
-                                  backgroundColor: Colors.green),
-                            );
-                          } else {
-                            setS(() => error = res['message']);
-                          }
-                        } catch (_) {
-                          setS(() => error = 'Koneksi gagal.');
-                        } finally {
-                          setS(() => loading = false);
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: type == 'in'
-                      ? const Color(0xFF1D9E75)
-                      : const Color(0xFFBA7517),
+              Container(
+                width: isTablet ? 48 : 40,
+                height: isTablet ? 48 : 40,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
                 ),
-                child: loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : Text(type == 'in' ? 'Tambahkan' : 'Kurangkan',
-                        style: const TextStyle(color: Colors.white)),
+                child: Icon(icon, color: color, size: isTablet ? 24 : 20),
               ),
-              const SizedBox(height: 20),
+              SizedBox(width: isTablet ? 16 : 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: isTablet ? 15 : 13,
+                        fontWeight: FontWeight.w600,
+                        color: _C.textMain,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      desc,
+                      style: TextStyle(
+                          fontSize: isTablet ? 12.5 : 11, color: _C.textSub),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: _C.textSub.withOpacity(0.4), size: isTablet ? 22 : 18),
             ],
           ),
         ),
@@ -537,7 +714,136 @@ class _ShiftAktifView extends StatelessWidget {
     );
   }
 
-  // ── Dialog Ganti Kasir ─────────────────────────────────
+  Widget _buildTutupButton(BuildContext context) {
+    final isTablet = _isTablet(context);
+    return GestureDetector(
+      onTap: () => _showTutupDialog(context),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(vertical: isTablet ? 16 : 14),
+        decoration: BoxDecoration(
+          color: _C.dangerLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _C.danger.withOpacity(0.25), width: 0.8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_outline_rounded,
+                color: _C.danger, size: isTablet ? 20 : 18),
+            const SizedBox(width: 8),
+            Text(
+              'Tutup Shift',
+              style: TextStyle(
+                color: _C.danger,
+                fontSize: isTablet ? 15 : 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Dialog Kas ────────────────────────────────────────
+  void _showKasDialog(BuildContext context, String type) {
+    final pinCtrl = TextEditingController();
+    final nominalCtrl = TextEditingController();
+    final ketCtrl = TextEditingController();
+    bool loading = false;
+    String? error;
+
+    final isIn = type == 'in';
+    final color = isIn ? _C.success : _C.warning;
+    final label = isIn ? 'Tambah Uang Kasir' : 'Kurangi Uang Kasir';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => _BottomSheetWrapper(
+          children: [
+            _sheetHeader(
+              icon: isIn ? Icons.add_rounded : Icons.remove_rounded,
+              iconBg: isIn ? _C.successLight : _C.warningLight,
+              iconColor: color,
+              title: label,
+            ),
+            const SizedBox(height: 18),
+            _buildFieldLabel('PIN Kasir'),
+            _buildTextField(
+              controller: pinCtrl,
+              hint: 'Masukkan PIN',
+              obscure: true,
+              keyboardType: TextInputType.number,
+              prefix: const Icon(Icons.lock_outline_rounded,
+                  color: _C.primary, size: 18),
+            ),
+            const SizedBox(height: 12),
+            _buildFieldLabel('Jumlah (Rp)'),
+            _buildTextField(
+              controller: nominalCtrl,
+              hint: '0',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              prefix: _rpPrefix(color),
+            ),
+            const SizedBox(height: 12),
+            _buildFieldLabel('Keterangan (opsional)'),
+            _buildTextField(
+              controller: ketCtrl,
+              hint: 'Keterangan...',
+              prefix:
+                  const Icon(Icons.notes_rounded, color: _C.primary, size: 18),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              _buildErrorBox(error!),
+            ],
+            const SizedBox(height: 18),
+            _buildPrimaryButton(
+              label: isIn ? 'Tambahkan' : 'Kurangkan',
+              icon:
+                  isIn ? Icons.add_circle_rounded : Icons.remove_circle_rounded,
+              loading: loading,
+              color: color,
+              onTap: () async {
+                setS(() {
+                  loading = true;
+                  error = null;
+                });
+                try {
+                  final res = await ShiftService.tambahKas(
+                    shiftId: shift['id'],
+                    pin: pinCtrl.text,
+                    type: type,
+                    jumlah: int.tryParse(nominalCtrl.text) ?? 0,
+                    keterangan: ketCtrl.text.isNotEmpty ? ketCtrl.text : null,
+                  );
+                  if (res['success'] == true) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      _snackBar(res['message'], _C.success),
+                    );
+                  } else {
+                    setS(() => error = res['message']);
+                  }
+                } catch (_) {
+                  setS(() => error = 'Koneksi gagal.');
+                } finally {
+                  setS(() => loading = false);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Dialog Ganti Kasir ───────────────────────────────
   void _showGantiKasirDialog(BuildContext context) {
     final pinCtrl = TextEditingController();
     bool loading = false;
@@ -546,88 +852,67 @@ class _ShiftAktifView extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              left: 20,
-              right: 20,
-              top: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Ganti Kasir',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              const Text(
-                  'Shift tetap berjalan, hanya user aktif yang berganti.',
-                  style: TextStyle(fontSize: 13, color: Colors.black54)),
-              const SizedBox(height: 16),
-              TextField(
-                  controller: pinCtrl,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: 'PIN Kasir Baru',
-                      border: OutlineInputBorder())),
-              if (error != null) ...[
-                const SizedBox(height: 8),
-                Text(error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 13)),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: loading
-                    ? null
-                    : () async {
-                        setS(() {
-                          loading = true;
-                          error = null;
-                        });
-                        try {
-                          final res = await ShiftService.gantiKasir(
-                              tokoId: tokoId, pin: pinCtrl.text);
-                          if (res['success'] == true) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Kasir berganti ke ${res['user']['name']}'),
-                                backgroundColor: Colors.blue,
-                              ),
-                            );
-                          } else {
-                            setS(() => error = res['message']);
-                          }
-                        } catch (_) {
-                          setS(() => error = 'Koneksi gagal.');
-                        } finally {
-                          setS(() => loading = false);
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF185FA5)),
-                child: loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Text('Konfirmasi Ganti Kasir',
-                        style: TextStyle(color: Colors.white)),
-              ),
-              const SizedBox(height: 20),
+        builder: (ctx, setS) => _BottomSheetWrapper(
+          children: [
+            _sheetHeader(
+              icon: Icons.swap_horiz_rounded,
+              iconBg: _C.accentLight,
+              iconColor: _C.accent,
+              title: 'Ganti Kasir',
+              subtitle: 'Shift tetap berjalan',
+            ),
+            const SizedBox(height: 18),
+            _buildFieldLabel('PIN Kasir Baru'),
+            _buildTextField(
+              controller: pinCtrl,
+              hint: 'Masukkan PIN kasir baru',
+              obscure: true,
+              keyboardType: TextInputType.number,
+              prefix: const Icon(Icons.person_outline_rounded,
+                  color: _C.primary, size: 18),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              _buildErrorBox(error!),
             ],
-          ),
+            const SizedBox(height: 18),
+            _buildPrimaryButton(
+              label: 'Konfirmasi Ganti Kasir',
+              icon: Icons.check_circle_outline_rounded,
+              loading: loading,
+              onTap: () async {
+                setS(() {
+                  loading = true;
+                  error = null;
+                });
+                try {
+                  final res = await ShiftService.gantiKasir(
+                      tokoId: tokoId, pin: pinCtrl.text);
+                  if (res['success'] == true) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      _snackBar('Kasir berganti ke ${res['user']['name']}',
+                          _C.accent),
+                    );
+                  } else {
+                    setS(() => error = res['message']);
+                  }
+                } catch (_) {
+                  setS(() => error = 'Koneksi gagal.');
+                } finally {
+                  setS(() => loading = false);
+                }
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ── Dialog Tutup Shift ─────────────────────────────────
+  // ── Dialog Tutup Shift ───────────────────────────────
   void _showTutupDialog(BuildContext context) {
     final pinCtrl = TextEditingController();
     final nominalCtrl = TextEditingController();
@@ -638,102 +923,87 @@ class _ShiftAktifView extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              left: 20,
-              right: 20,
-              top: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Tutup Shift',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              const Text('Hitung uang di laci kasir, lalu input jumlahnya.',
-                  style: TextStyle(fontSize: 13, color: Colors.black54)),
-              const SizedBox(height: 16),
-              TextField(
-                  controller: pinCtrl,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: 'PIN Kasir', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: nominalCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                      labelText: 'Uang di Laci Sekarang (Rp)',
-                      prefixText: 'Rp ',
-                      border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: ketCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Catatan (opsional)',
-                      border: OutlineInputBorder())),
-              if (error != null) ...[
-                const SizedBox(height: 8),
-                Text(error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 13)),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: loading
-                    ? null
-                    : () async {
-                        setS(() {
-                          loading = true;
-                          error = null;
-                        });
-                        try {
-                          final res = await ShiftService.tutupShift(
-                            shiftId: shift['id'],
-                            pin: pinCtrl.text,
-                            closeAmount: int.tryParse(nominalCtrl.text) ?? 0,
-                            catatanTutup:
-                                ketCtrl.text.isNotEmpty ? ketCtrl.text : null,
-                          );
-                          if (res['success'] == true) {
-                            Navigator.pop(ctx);
-                            // Tampilkan ringkasan shift
-                            _showRingkasanDialog(
-                                context, res['ringkasan'], res['shift']);
-                          } else {
-                            setS(() => error = res['message']);
-                          }
-                        } catch (_) {
-                          setS(() => error = 'Koneksi gagal.');
-                        } finally {
-                          setS(() => loading = false);
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFA32D2D)),
-                child: loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Text('Tutup Shift Sekarang',
-                        style: TextStyle(color: Colors.white)),
-              ),
-              const SizedBox(height: 20),
+        builder: (ctx, setS) => _BottomSheetWrapper(
+          children: [
+            _sheetHeader(
+              icon: Icons.lock_outline_rounded,
+              iconBg: _C.dangerLight,
+              iconColor: _C.danger,
+              title: 'Tutup Shift',
+              subtitle: 'Hitung uang di laci terlebih dahulu',
+            ),
+            const SizedBox(height: 18),
+            _buildFieldLabel('PIN Kasir'),
+            _buildTextField(
+              controller: pinCtrl,
+              hint: 'Masukkan PIN',
+              obscure: true,
+              keyboardType: TextInputType.number,
+              prefix: const Icon(Icons.lock_outline_rounded,
+                  color: _C.primary, size: 18),
+            ),
+            const SizedBox(height: 12),
+            _buildFieldLabel('Uang di Laci Sekarang'),
+            _buildTextField(
+              controller: nominalCtrl,
+              hint: '0',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              prefix: _rpPrefix(_C.danger),
+            ),
+            const SizedBox(height: 12),
+            _buildFieldLabel('Catatan (opsional)'),
+            _buildTextField(
+              controller: ketCtrl,
+              hint: 'Catatan penutupan...',
+              prefix:
+                  const Icon(Icons.notes_rounded, color: _C.primary, size: 18),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              _buildErrorBox(error!),
             ],
-          ),
+            const SizedBox(height: 18),
+            _buildPrimaryButton(
+              label: 'Tutup Shift Sekarang',
+              icon: Icons.lock_rounded,
+              loading: loading,
+              color: _C.danger,
+              onTap: () async {
+                setS(() {
+                  loading = true;
+                  error = null;
+                });
+                try {
+                  final res = await ShiftService.tutupShift(
+                    shiftId: shift['id'],
+                    pin: pinCtrl.text,
+                    closeAmount: int.tryParse(nominalCtrl.text) ?? 0,
+                    catatanTutup: ketCtrl.text.isNotEmpty ? ketCtrl.text : null,
+                  );
+                  if (res['success'] == true) {
+                    Navigator.pop(ctx);
+                    _showRingkasanDialog(
+                        context, res['ringkasan'], res['shift']);
+                  } else {
+                    setS(() => error = res['message']);
+                  }
+                } catch (_) {
+                  setS(() => error = 'Koneksi gagal.');
+                } finally {
+                  setS(() => loading = false);
+                }
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ── Dialog Ringkasan setelah tutup shift ───────────────
+  // ── Dialog Ringkasan ─────────────────────────────────
   void _showRingkasanDialog(BuildContext context,
       Map<String, dynamic> ringkasan, Map<String, dynamic> shiftData) {
     final selisih = (ringkasan['selisih'] as num?)?.toInt() ?? 0;
@@ -742,77 +1012,137 @@ class _ShiftAktifView extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ringkasan Shift',
-            style: TextStyle(fontWeight: FontWeight.w600)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ringkasanRow(
-                'Total Transaksi', '${ringkasan['total_order']} order'),
-            _ringkasanRow(
-                'Total Penjualan', 'Rp ${_fmt(ringkasan['total_penjualan'])}'),
-            const Divider(),
-            _ringkasanRow('Kas Awal', 'Rp ${_fmt(ringkasan['kas_awal'])}'),
-            _ringkasanRow('Kas Masuk Manual',
-                'Rp ${_fmt(ringkasan['kas_masuk_manual'])}'),
-            _ringkasanRow('Kas Keluar Manual',
-                'Rp ${_fmt(ringkasan['kas_keluar_manual'])}'),
-            const Divider(),
-            _ringkasanRow('Kas Sistem', 'Rp ${_fmt(ringkasan['kas_sistem'])}'),
-            _ringkasanRow('Kas Aktual', 'Rp ${_fmt(ringkasan['kas_aktual'])}'),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color:
-                    isLebih ? const Color(0xFFEAF3DE) : const Color(0xFFFCEBEB),
-                borderRadius: BorderRadius.circular(8),
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: _C.primarySurface,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.summarize_outlined,
+                        color: _C.primary, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Ringkasan Shift',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: _C.textMain,
+                    ),
+                  ),
+                ],
               ),
-              child: Row(
+              const SizedBox(height: 18),
+              _ringRow('Total Transaksi', '${ringkasan['total_order']} order'),
+              _ringRow('Total Penjualan',
+                  'Rp ${_fmt(ringkasan['total_penjualan'])}'),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(color: _C.divider, height: 1, thickness: 0.8),
+              ),
+              _ringRow('Kas Awal', 'Rp ${_fmt(ringkasan['kas_awal'])}'),
+              _ringRow('Kas Masuk Manual',
+                  'Rp ${_fmt(ringkasan['kas_masuk_manual'])}'),
+              _ringRow('Kas Keluar Manual',
+                  'Rp ${_fmt(ringkasan['kas_keluar_manual'])}'),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(color: _C.divider, height: 1, thickness: 0.8),
+              ),
+              _ringRow('Kas Sistem', 'Rp ${_fmt(ringkasan['kas_sistem'])}'),
+              _ringRow('Kas Aktual', 'Rp ${_fmt(ringkasan['kas_aktual'])}'),
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: isLebih ? _C.successLight : _C.dangerLight,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isLebih
+                        ? _C.success.withOpacity(0.25)
+                        : _C.danger.withOpacity(0.25),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Selisih',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: isLebih
-                                ? const Color(0xFF3B6D11)
-                                : const Color(0xFFA32D2D))),
+                    Text(
+                      'Selisih',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: isLebih ? _C.success : _C.danger,
+                      ),
+                    ),
                     Text(
                       '${isLebih ? '+' : ''}Rp ${_fmt(selisih.abs())}',
                       style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: isLebih
-                              ? const Color(0xFF3B6D11)
-                              : const Color(0xFFA32D2D)),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: isLebih ? _C.success : _C.danger,
+                      ),
                     ),
-                  ]),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              onTutup();
-            },
-            child: const Text('Selesai'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onTutup();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    color: _C.primary,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'Selesai',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _ringkasanRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child:
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(label,
-              style: const TextStyle(fontSize: 13, color: Colors.black54)),
-          Text(value,
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        ]),
+  Widget _ringRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3.5),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: const TextStyle(fontSize: 12.5, color: _C.textSub)),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: _C.textMain)),
+          ],
+        ),
       );
 
   String _fmt(dynamic val) {
@@ -821,6 +1151,260 @@ class _ShiftAktifView extends StatelessWidget {
     return n.abs().toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Bottom Sheet Wrapper — handle + padding sudah termasuk
+// ─────────────────────────────────────────────────────────────
+class _BottomSheetWrapper extends StatelessWidget {
+  final List<Widget> children;
+  const _BottomSheetWrapper({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final isTablet = _isTablet(context);
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 28,
+        top: 16,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isTablet ? 640.0 : double.infinity,
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: isTablet ? 32.0 : 22.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 3.5,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(
+                      color: _C.divider,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                ...children,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Helper: header dialog sheet
+Widget _sheetHeader({
+  required IconData icon,
+  required Color iconBg,
+  required Color iconColor,
+  required String title,
+  String? subtitle,
+}) {
+  return Row(
+    children: [
+      Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: iconBg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: iconColor, size: 20),
+      ),
+      const SizedBox(width: 12),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: _C.textMain,
+            ),
+          ),
+          if (subtitle != null)
+            Text(subtitle,
+                style: const TextStyle(fontSize: 11.5, color: _C.textSub)),
+        ],
+      ),
+    ],
+  );
+}
+
+// Helper: prefix "Rp" untuk field nominal
+Widget _rpPrefix(Color color) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(right: BorderSide(color: _C.divider, width: 0.8)),
+      ),
+      child: Text(
+        'Rp',
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+        ),
+      ),
+    );
+
+// Helper: snackbar
+SnackBar _snackBar(String msg, Color color) => SnackBar(
+      content: Text(msg, style: const TextStyle(fontSize: 13)),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.all(12),
+    );
+
+// ─────────────────────────────────────────────────────────────
+// Komponen UI bersama
+// ─────────────────────────────────────────────────────────────
+Widget _buildFieldLabel(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          color: _C.textSub,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+
+Widget _buildTextField({
+  required TextEditingController controller,
+  required String hint,
+  bool obscure = false,
+  TextInputType? keyboardType,
+  List<TextInputFormatter>? inputFormatters,
+  int? maxLength,
+  Widget? prefix,
+  Widget? suffix,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: _C.card,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: _C.divider, width: 0.8),
+    ),
+    child: TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      maxLength: maxLength,
+      style: const TextStyle(
+        fontSize: 13.5,
+        color: _C.textMain,
+        fontWeight: FontWeight.w500,
+      ),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: _C.textSub, fontSize: 13.5),
+        border: InputBorder.none,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        prefixIcon: prefix != null
+            ? Padding(
+                padding: const EdgeInsets.only(left: 12, right: 8),
+                child: prefix,
+              )
+            : null,
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        suffixIcon: suffix,
+        counterText: '',
+      ),
+    ),
+  );
+}
+
+Widget _buildErrorBox(String message) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _C.dangerLight,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: _C.danger.withOpacity(0.25), width: 0.8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: _C.danger, size: 15),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: _C.danger, fontSize: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
+
+Widget _buildPrimaryButton({
+  required String label,
+  required IconData icon,
+  required bool loading,
+  required VoidCallback onTap,
+  Color? color,
+}) {
+  final btnColor = color ?? _C.primary;
+  return GestureDetector(
+    onTap: loading ? null : onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      height: 50,
+      decoration: BoxDecoration(
+        color: btnColor,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: btnColor.withOpacity(0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Center(
+        child: loading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: Colors.white, size: 17),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    ),
+  );
 }
 
 String _fmt(dynamic val) {

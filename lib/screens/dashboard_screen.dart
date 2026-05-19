@@ -3,11 +3,13 @@ import 'package:kasvo_kasir/screens/pengeluaran_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
+import '../services/shift_service.dart'; // ← TAMBAHAN
 import 'login_screen.dart';
 import 'pesanan_screen.dart';
 import 'riwayat_screen.dart';
 import 'printer_setup_screen.dart';
 import 'absensi_screen.dart';
+import 'shift_screen.dart'; // ← TAMBAHAN
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RESPONSIVE HELPER
@@ -102,6 +104,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isLoading = true;
   bool _saldoVisible = true;
 
+  // ── TAMBAHAN: variabel shift & user identity ──────────────────────────────
+  int _tokoId = 0;
+  int _userId = 0;
+  Map<String, dynamic>? _shiftAktif;
+  bool _shiftLoading = false;
+  // ─────────────────────────────────────────────────────────────────────────
+
   double _uangDiOutlet = 0;
   double _pengeluaran = 0;
   double _transfer = 0;
@@ -131,6 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.dispose();
   }
 
+  // ── DIUBAH: tambah load tokoId, userId, lalu panggil _cekShiftAktif ───────
   Future<void> _loadUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -141,13 +151,17 @@ class _DashboardScreenState extends State<DashboardScreen>
           _userName = user['name'] ?? 'Kasir';
           _userRole = user['role'] ?? 'kasir';
           _tokoNama = user['toko_nama'] ?? 'Kasvo';
+          _tokoId = user['toko_id'] ?? 0; // ← TAMBAHAN
+          _userId = user['id'] ?? 0; // ← TAMBAHAN
         });
         _animationController?.forward();
+        _cekShiftAktif(); // ← TAMBAHAN: cek shift setelah user data siap
       }
     } catch (e) {
       debugPrint('Error loading user data: $e');
     }
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _loadDashboardStats() async {
     setState(() => _isLoading = true);
@@ -170,6 +184,57 @@ class _DashboardScreenState extends State<DashboardScreen>
       setState(() => _isLoading = false);
     }
   }
+
+  // ── TAMBAHAN: cek shift aktif ─────────────────────────────────────────────
+  Future<void> _cekShiftAktif() async {
+    if (_tokoId == 0 || _userId == 0) return;
+    setState(() => _shiftLoading = true);
+    try {
+      final res = await ShiftService.cekShiftAktif(
+        tokoId: _tokoId,
+        userId: _userId,
+      );
+      if (res['shift_aktif'] == true) {
+        setState(() {
+          _shiftAktif = res['shift'];
+          _shiftLoading = false;
+        });
+      } else {
+        setState(() => _shiftLoading = false);
+        // Shift belum aktif → langsung arahkan ke ShiftScreen
+        if (mounted) _bukaShiftScreen();
+      }
+    } catch (e) {
+      debugPrint('Error cek shift: $e');
+      setState(() => _shiftLoading = false);
+    }
+  }
+
+  // ── TAMBAHAN: buka ShiftScreen ────────────────────────────────────────────
+  // SESUDAH
+  void _bukaShiftScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShiftScreen(
+          tokoId: _tokoId,
+          userId: _userId,
+          onShiftOpened: (user, shift) {
+            setState(() => _shiftAktif = shift);
+          },
+          onShiftClosed: () {
+            // Shift ditutup → hapus status aktif di dashboard
+            setState(() => _shiftAktif = null);
+          },
+        ),
+      ),
+    ).then((_) {
+      // Jaga-jaga: re-cek dari server saat kembali ke dashboard
+      // (menangkap kasus tutup shift tanpa callback, misal back button)
+      _cekShiftAktif();
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _logout() async {
     final r = _R(
@@ -271,6 +336,25 @@ class _DashboardScreenState extends State<DashboardScreen>
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _buildHeaderWithCard(r)),
+        // ── TAMBAHAN: banner shift (hanya tampil jika shift belum aktif) ────
+        if (!_shiftLoading && _shiftAktif == null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  r.pagePadH, r.sectionGap * 0.6, r.pagePadH, 0),
+              child: _buildShiftBanner(r),
+            ),
+          ),
+        // ── TAMBAHAN: info shift aktif (tampil jika shift sudah aktif) ──────
+        if (_shiftAktif != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  r.pagePadH, r.sectionGap * 0.6, r.pagePadH, 0),
+              child: _buildShiftAktifInfo(r),
+            ),
+          ),
+        // ────────────────────────────────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
             padding:
@@ -290,6 +374,89 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // ── TAMBAHAN: banner peringatan shift belum aktif ─────────────────────────
+  Widget _buildShiftBanner(_R r) {
+    return GestureDetector(
+      onTap: _bukaShiftScreen,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: r.pagePadH, vertical: r.pagePadV * 0.7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF3CD),
+          borderRadius: BorderRadius.circular(r.cardRadius * 0.7),
+          border: Border.all(color: const Color(0xFFFFCA28), width: 1),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                color: Color(0xFFE65100), size: 20),
+            SizedBox(width: r.pagePadH * 0.5),
+            Expanded(
+              child: Text(
+                'Shift belum dibuka. Ketuk untuk membuka shift.',
+                style: TextStyle(
+                  fontSize: r.fontSm,
+                  color: const Color(0xFF7A4500),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: Color(0xFFE65100), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── TAMBAHAN: info shift aktif ringkas ────────────────────────────────────
+  Widget _buildShiftAktifInfo(_R r) {
+    return GestureDetector(
+      onTap: _bukaShiftScreen,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: r.pagePadH, vertical: r.pagePadV * 0.7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(r.cardRadius * 0.7),
+          border: Border.all(color: const Color(0xFF81C784), width: 1),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.radio_button_checked,
+                color: Color(0xFF2E7D32), size: 16),
+            SizedBox(width: r.pagePadH * 0.5),
+            Expanded(
+              child: Text(
+                'Shift aktif · ${_shiftAktif?['kasir_nama'] ?? '-'} · '
+                'Kas awal Rp ${_fmt(_shiftAktif?['open_amount'])}',
+                style: TextStyle(
+                  fontSize: r.fontXs,
+                  color: const Color(0xFF2E7D32),
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              'Kelola',
+              style: TextStyle(
+                fontSize: r.fontXs,
+                color: const Color(0xFF2E7D32),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(Icons.chevron_right_rounded,
+                color: Color(0xFF2E7D32), size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildTabletLandscapeLayout(_R r) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -307,6 +474,18 @@ class _DashboardScreenState extends State<DashboardScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(height: r.sh * 0.04),
+                  // ── TAMBAHAN: banner/info shift di tablet ────────────────
+                  if (!_shiftLoading && _shiftAktif == null)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: r.sectionGap),
+                      child: _buildShiftBanner(r),
+                    ),
+                  if (_shiftAktif != null)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: r.sectionGap),
+                      child: _buildShiftAktifInfo(r),
+                    ),
+                  // ─────────────────────────────────────────────────────────
                   _buildSaldoCard(r),
                   SizedBox(height: r.sectionGap),
                   _buildTransactionSummary(r),
@@ -383,8 +562,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(r.sh * 0.02),
-                          child: Image.network(
-                            'https://orderkuy.indotechconsulting.com/assets/img/logo_new.png',
+                          child: Image.asset(
+                            'assets/icon/btp.png',
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => Center(
                               child: Icon(
@@ -404,7 +583,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           end: Alignment.bottomRight,
                         ).createShader(bounds),
                         child: Text(
-                          'kasvo',
+                          'Kasvo',
                           style: TextStyle(
                             fontSize: r.fontTitle * 1.15,
                             fontFamily: 'Poppins',
@@ -929,6 +1108,15 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   List<_MenuData> _getMenuData() {
     return [
+      // ── TAMBAHAN: menu Shift ──────────────────────────────────────────────
+      _MenuData(
+        icon: Icons.access_time_rounded,
+        label: 'Shift',
+        color: const Color(0xFF00796B),
+        bgColor: const Color(0xFFE0F2F1),
+        onTap: _bukaShiftScreen,
+      ),
+      // ─────────────────────────────────────────────────────────────────────
       _MenuData(
         icon: Icons.point_of_sale_rounded,
         label: 'Kasir',
@@ -945,14 +1133,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTap: () => Navigator.push(
             context, MaterialPageRoute(builder: (_) => const RiwayatScreen())),
       ),
-      _MenuData(
-        icon: Icons.money_off_csred_rounded,
-        label: 'Pengeluaran',
-        color: const Color(0xFF1565C0),
-        bgColor: const Color(0xFFEFF4FF),
-        onTap: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const PengeluaranScreen())),
-      ),
+      // _MenuData(
+      //   icon: Icons.money_off_csred_rounded,
+      //   label: 'Pengeluaran',
+      //   color: const Color(0xFF1565C0),
+      //   bgColor: const Color(0xFFEFF4FF),
+      //   onTap: () => Navigator.push(context,
+      //       MaterialPageRoute(builder: (_) => const PengeluaranScreen())),
+      // ),
       _MenuData(
         icon: Icons.fingerprint_rounded,
         label: 'Absensi',
@@ -1272,6 +1460,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     ];
     return names[month];
   }
+
+  // ── TAMBAHAN: helper format angka ─────────────────────────────────────────
+  String _fmt(dynamic val) {
+    if (val == null) return '0';
+    final n = (val is num) ? val.toInt() : (int.tryParse(val.toString()) ?? 0);
+    return n.abs().toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 }
 
 class _BottomWaveClipper extends CustomClipper<Path> {

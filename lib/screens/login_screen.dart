@@ -374,8 +374,8 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(24),
-              child: Image.network(
-                'https://orderkuy.indotechconsulting.com/assets/img/btb.png',
+              child: Image.asset(
+                'assets/icon/kasvo.png',
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => const Center(
                   child: Icon(

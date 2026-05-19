@@ -159,8 +159,8 @@ class _SplashScreenState extends State<SplashScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Image.network(
-                'https://orderkuy.indotechconsulting.com/assets/img/btb.png',
+              child: Image.asset(
+                'assets/icon/kasvo.png',
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return const Icon(
