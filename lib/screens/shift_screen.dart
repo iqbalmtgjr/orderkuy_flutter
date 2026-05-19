@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/shift_service.dart';
+import '../services/print_service.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Tema Warna Global
@@ -22,6 +23,54 @@ class _C {
   static const textMain = Color(0xFF0f2442);
   static const textSub = Color(0xFF7A8CA0);
   static const divider = Color(0xFFE8EEF5);
+}
+
+// ─────────────────────────────────────────────────────────────
+// RupiahInputFormatter — format otomatis saat mengetik
+// Contoh: 1000000 → "1.000.000"
+// getRawValue() → mengembalikan angka bersih (int)
+// ─────────────────────────────────────────────────────────────
+class RupiahInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Ambil hanya digit
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (digitsOnly.isEmpty) {
+      return const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Hilangkan leading zeros (kecuali input hanya "0")
+    final cleaned = digitsOnly.replaceFirst(RegExp(r'^0+'), '');
+    final number = cleaned.isEmpty ? '0' : cleaned;
+
+    // Format dengan titik ribuan
+    final formatted = _addThousandSeparator(number);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  static String _addThousandSeparator(String number) {
+    return number.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]}.',
+    );
+  }
+
+  /// Ambil nilai int bersih dari controller yang menggunakan formatter ini
+  static int getRawValue(TextEditingController ctrl) {
+    final raw = ctrl.text.replaceAll('.', '');
+    return int.tryParse(raw) ?? 0;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -175,7 +224,7 @@ class _ShiftScreenState extends State<ShiftScreen>
           _shift = null;
         });
         _animCtrl.forward(from: 0);
-        widget.onShiftClosed?.call(); // ← beritahu dashboard shift sudah tutup
+        widget.onShiftClosed?.call();
       },
       onRefresh: _cekShift,
     );
@@ -185,25 +234,19 @@ class _ShiftScreenState extends State<ShiftScreen>
 // ─────────────────────────────────────────────────────────────
 // Responsive helpers
 // ─────────────────────────────────────────────────────────────
-
-/// Tablet = lebar layar >= 600dp
 bool _isTablet(BuildContext context) =>
     MediaQuery.of(context).size.shortestSide >= 600;
 
-/// Horizontal padding konten — lebih lebar di tablet
 double _hPad(BuildContext context) => _isTablet(context) ? 40.0 : 20.0;
 
-/// Max-width konten supaya di tablet tidak terlalu melebar
 double _maxContentWidth(BuildContext context) =>
     _isTablet(context) ? 680.0 : double.infinity;
 
 // ─────────────────────────────────────────────────────────────
-// Header biru dengan kurva bawah — tinggi auto (wrap content)
+// Header biru dengan kurva bawah
 // ─────────────────────────────────────────────────────────────
 class _BlueHeader extends StatelessWidget {
   final Widget child;
-
-  // height dihapus — sekarang menyesuaikan konten secara otomatis
   const _BlueHeader({required this.child});
 
   @override
@@ -214,7 +257,6 @@ class _BlueHeader extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // Background gradient — wraps child
         Container(
           width: double.infinity,
           decoration: const BoxDecoration(
@@ -227,7 +269,6 @@ class _BlueHeader extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.hardEdge,
             children: [
-              // Dekor lingkaran — ukuran relative terhadap lebar layar
               Positioned(
                   top: -screenW * 0.1,
                   right: -screenW * 0.04,
@@ -240,11 +281,9 @@ class _BlueHeader extends StatelessWidget {
                   bottom: 40,
                   left: -screenW * 0.03,
                   child: _circle(screenW * 0.12, 0.04)),
-              // Konten
               SafeArea(
                 bottom: false,
                 child: Padding(
-                  // Padding bawah ekstra untuk ruang kurva
                   padding: EdgeInsets.only(bottom: isTablet ? 40.0 : 32.0),
                   child: child,
                 ),
@@ -252,7 +291,6 @@ class _BlueHeader extends StatelessWidget {
             ],
           ),
         ),
-        // Kurva bg di bawah — tinggi relative
         Positioned(
           bottom: 0,
           left: 0,
@@ -276,7 +314,6 @@ class _BlueHeader extends StatelessWidget {
       );
 }
 
-// Painter kurva bawah header — mengisi dengan warna bg
 class _BottomCurvePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -329,7 +366,8 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
       setState(() => _error = 'PIN wajib diisi');
       return;
     }
-    final nominal = int.tryParse(_nominalCtrl.text.replaceAll('.', '')) ?? 0;
+    // Ambil nilai bersih dari field nominal (hilangkan titik ribuan)
+    final nominal = RupiahInputFormatter.getRawValue(_nominalCtrl);
     setState(() {
       _loading = true;
       _error = null;
@@ -419,34 +457,19 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildFieldLabel('PIN Kasir'),
-                    _buildTextField(
+                    _buildPinField(
                       controller: _pinCtrl,
                       hint: 'Masukkan PIN',
-                      obscure: !_pinVisible,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      prefix: const Icon(Icons.lock_outline_rounded,
-                          color: _C.primary, size: 18),
-                      suffix: IconButton(
-                        icon: Icon(
-                          _pinVisible
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: _C.textSub,
-                          size: 18,
-                        ),
-                        onPressed: () =>
-                            setState(() => _pinVisible = !_pinVisible),
-                      ),
+                      pinVisible: _pinVisible,
+                      onToggleVisibility: () =>
+                          setState(() => _pinVisible = !_pinVisible),
                     ),
                     const SizedBox(height: 14),
                     _buildFieldLabel('Uang Awal di Laci'),
-                    _buildTextField(
+                    _buildRupiahField(
                       controller: _nominalCtrl,
                       hint: '0',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      prefix: _rpPrefix(_C.primary),
+                      color: _C.primary,
                     ),
                     const SizedBox(height: 14),
                     _buildFieldLabel('Catatan (opsional)'),
@@ -479,7 +502,7 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Shift Aktif View — PERBAIKAN UTAMA
+// Shift Aktif View
 // ─────────────────────────────────────────────────────────────
 class _ShiftAktifView extends StatelessWidget {
   final Map<String, dynamic> shift;
@@ -502,7 +525,6 @@ class _ShiftAktifView extends StatelessWidget {
     return SingleChildScrollView(
       child: Column(
         children: [
-          // ── Header responsif ────────────────────────────
           _BlueHeader(
             child: Center(
               child: ConstrainedBox(
@@ -515,7 +537,6 @@ class _ShiftAktifView extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Badge SHIFT AKTIF
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 5),
@@ -563,7 +584,6 @@ class _ShiftAktifView extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: isTablet ? 16 : 14),
-                      // Chip kas awal
                       Container(
                         padding: EdgeInsets.symmetric(
                             horizontal: isTablet ? 18 : 14,
@@ -599,8 +619,6 @@ class _ShiftAktifView extends StatelessWidget {
               ),
             ),
           ),
-
-          // ── Konten aksi responsif ───────────────────────
           Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: _maxContentWidth(context)),
@@ -639,6 +657,8 @@ class _ShiftAktifView extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     _buildTutupButton(context),
+                    const SizedBox(height: 24),
+                    _buildRiwayatKasList(context),
                   ],
                 ),
               ),
@@ -646,6 +666,101 @@ class _ShiftAktifView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRiwayatKasList(BuildContext context) {
+    final cashFlows = shift['cash_flows'] as List<dynamic>? ?? [];
+    if (cashFlows.isEmpty) return const SizedBox.shrink();
+
+    final isTablet = _isTablet(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Riwayat Kas Shift Ini',
+          style: TextStyle(
+            fontSize: isTablet ? 15 : 14,
+            fontWeight: FontWeight.w700,
+            color: _C.textMain,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...cashFlows.map((cf) {
+          final type = cf['type'];
+          final isIn = type == 'in';
+          final color = isIn ? _C.success : _C.warning;
+          final nominal = _fmt(cf['jumlah']);
+
+          String time = '-';
+          if (cf['created_at'] != null) {
+            try {
+              final dt = DateTime.parse(cf['created_at']).toLocal();
+              time =
+                  '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+            } catch (_) {}
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.all(isTablet ? 16 : 12),
+            decoration: BoxDecoration(
+              color: _C.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _C.divider, width: 0.8),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isIn ? _C.successLight : _C.warningLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isIn
+                        ? Icons.arrow_downward_rounded
+                        : Icons.arrow_upward_rounded,
+                    color: color,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        cf['keterangan'] ?? (isIn ? 'Kas Masuk' : 'Kas Keluar'),
+                        style: TextStyle(
+                          fontSize: isTablet ? 14 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: _C.textMain,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Pukul $time',
+                        style: TextStyle(
+                            fontSize: isTablet ? 12 : 11, color: _C.textSub),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${isIn ? '+' : '-'} Rp $nominal',
+                  style: TextStyle(
+                    fontSize: isTablet ? 14 : 13,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ],
     );
   }
 
@@ -746,7 +861,7 @@ class _ShiftAktifView extends StatelessWidget {
     );
   }
 
-  // ── Dialog Kas ────────────────────────────────────────
+  // ── Dialog Kas (Tambah / Kurangi) ─────────────────────────
   void _showKasDialog(BuildContext context, String type) {
     final pinCtrl = TextEditingController();
     final nominalCtrl = TextEditingController();
@@ -773,22 +888,18 @@ class _ShiftAktifView extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             _buildFieldLabel('PIN Kasir'),
-            _buildTextField(
+            _buildPinField(
               controller: pinCtrl,
               hint: 'Masukkan PIN',
-              obscure: true,
-              keyboardType: TextInputType.number,
-              prefix: const Icon(Icons.lock_outline_rounded,
-                  color: _C.primary, size: 18),
+              pinVisible: false,
+              onToggleVisibility: null, // tanpa toggle di sheet
             ),
             const SizedBox(height: 12),
             _buildFieldLabel('Jumlah (Rp)'),
-            _buildTextField(
+            _buildRupiahField(
               controller: nominalCtrl,
               hint: '0',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              prefix: _rpPrefix(color),
+              color: color,
             ),
             const SizedBox(height: 12),
             _buildFieldLabel('Keterangan (opsional)'),
@@ -819,7 +930,7 @@ class _ShiftAktifView extends StatelessWidget {
                     shiftId: shift['id'],
                     pin: pinCtrl.text,
                     type: type,
-                    jumlah: int.tryParse(nominalCtrl.text) ?? 0,
+                    jumlah: RupiahInputFormatter.getRawValue(nominalCtrl),
                     keterangan: ketCtrl.text.isNotEmpty ? ketCtrl.text : null,
                   );
                   if (res['success'] == true) {
@@ -827,6 +938,7 @@ class _ShiftAktifView extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       _snackBar(res['message'], _C.success),
                     );
+                    onRefresh();
                   } else {
                     setS(() => error = res['message']);
                   }
@@ -843,7 +955,7 @@ class _ShiftAktifView extends StatelessWidget {
     );
   }
 
-  // ── Dialog Ganti Kasir ───────────────────────────────
+  // ── Dialog Ganti Kasir ───────────────────────────────────
   void _showGantiKasirDialog(BuildContext context) {
     final pinCtrl = TextEditingController();
     bool loading = false;
@@ -865,13 +977,11 @@ class _ShiftAktifView extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             _buildFieldLabel('PIN Kasir Baru'),
-            _buildTextField(
+            _buildPinField(
               controller: pinCtrl,
               hint: 'Masukkan PIN kasir baru',
-              obscure: true,
-              keyboardType: TextInputType.number,
-              prefix: const Icon(Icons.person_outline_rounded,
-                  color: _C.primary, size: 18),
+              pinVisible: false,
+              onToggleVisibility: null,
             ),
             if (error != null) ...[
               const SizedBox(height: 10),
@@ -912,7 +1022,7 @@ class _ShiftAktifView extends StatelessWidget {
     );
   }
 
-  // ── Dialog Tutup Shift ───────────────────────────────
+  // ── Dialog Tutup Shift ───────────────────────────────────
   void _showTutupDialog(BuildContext context) {
     final pinCtrl = TextEditingController();
     final nominalCtrl = TextEditingController();
@@ -936,22 +1046,18 @@ class _ShiftAktifView extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             _buildFieldLabel('PIN Kasir'),
-            _buildTextField(
+            _buildPinField(
               controller: pinCtrl,
               hint: 'Masukkan PIN',
-              obscure: true,
-              keyboardType: TextInputType.number,
-              prefix: const Icon(Icons.lock_outline_rounded,
-                  color: _C.primary, size: 18),
+              pinVisible: false,
+              onToggleVisibility: null,
             ),
             const SizedBox(height: 12),
             _buildFieldLabel('Uang di Laci Sekarang'),
-            _buildTextField(
+            _buildRupiahField(
               controller: nominalCtrl,
               hint: '0',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              prefix: _rpPrefix(_C.danger),
+              color: _C.danger,
             ),
             const SizedBox(height: 12),
             _buildFieldLabel('Catatan (opsional)'),
@@ -980,7 +1086,7 @@ class _ShiftAktifView extends StatelessWidget {
                   final res = await ShiftService.tutupShift(
                     shiftId: shift['id'],
                     pin: pinCtrl.text,
-                    closeAmount: int.tryParse(nominalCtrl.text) ?? 0,
+                    closeAmount: RupiahInputFormatter.getRawValue(nominalCtrl),
                     catatanTutup: ketCtrl.text.isNotEmpty ? ketCtrl.text : null,
                   );
                   if (res['success'] == true) {
@@ -1003,7 +1109,7 @@ class _ShiftAktifView extends StatelessWidget {
     );
   }
 
-  // ── Dialog Ringkasan ─────────────────────────────────
+  // ── Dialog Ringkasan ─────────────────────────────────────
   void _showRingkasanDialog(BuildContext context,
       Map<String, dynamic> ringkasan, Map<String, dynamic> shiftData) {
     final selisih = (ringkasan['selisih'] as num?)?.toInt() ?? 0;
@@ -1100,27 +1206,77 @@ class _ShiftAktifView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(ctx);
-                  onTutup();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  decoration: BoxDecoration(
-                    color: _C.primary,
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Text(
-                    'Selesai',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () async {
+                        bool success =
+                            await ThermalPrintService.printShiftSummary(
+                          shift: shiftData,
+                          ringkasan: ringkasan,
+                        );
+                        if (!success && ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                                content: Text(
+                                    'Gagal mencetak struk! Cek koneksi printer.')),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: _C.primary, width: 1.2),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.print_rounded,
+                                color: _C.primary, size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              'Cetak Struk',
+                              style: TextStyle(
+                                color: _C.primary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        onTutup();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        decoration: BoxDecoration(
+                          color: _C.primary,
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text(
+                          'Selesai',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1154,7 +1310,7 @@ class _ShiftAktifView extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Bottom Sheet Wrapper — handle + padding sudah termasuk
+// Bottom Sheet Wrapper
 // ─────────────────────────────────────────────────────────────
 class _BottomSheetWrapper extends StatelessWidget {
   final List<Widget> children;
@@ -1183,7 +1339,6 @@ class _BottomSheetWrapper extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Handle
                 Center(
                   child: Container(
                     width: 36,
@@ -1205,7 +1360,10 @@ class _BottomSheetWrapper extends StatelessWidget {
   }
 }
 
-// Helper: header dialog sheet
+// ─────────────────────────────────────────────────────────────
+// Helper widgets (top-level)
+// ─────────────────────────────────────────────────────────────
+
 Widget _sheetHeader({
   required IconData icon,
   required Color iconBg,
@@ -1245,23 +1403,6 @@ Widget _sheetHeader({
   );
 }
 
-// Helper: prefix "Rp" untuk field nominal
-Widget _rpPrefix(Color color) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: const BoxDecoration(
-        border: Border(right: BorderSide(color: _C.divider, width: 0.8)),
-      ),
-      child: Text(
-        'Rp',
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 13,
-        ),
-      ),
-    );
-
-// Helper: snackbar
 SnackBar _snackBar(String msg, Color color) => SnackBar(
       content: Text(msg, style: const TextStyle(fontSize: 13)),
       backgroundColor: color,
@@ -1270,9 +1411,6 @@ SnackBar _snackBar(String msg, Color color) => SnackBar(
       margin: const EdgeInsets.all(12),
     );
 
-// ─────────────────────────────────────────────────────────────
-// Komponen UI bersama
-// ─────────────────────────────────────────────────────────────
 Widget _buildFieldLabel(String text) => Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
@@ -1286,6 +1424,132 @@ Widget _buildFieldLabel(String text) => Padding(
       ),
     );
 
+// ── Field PIN — keyboard angka, tanpa format ──────────────────
+// onToggleVisibility null = tanpa tombol show/hide (di bottom sheet)
+Widget _buildPinField({
+  required TextEditingController controller,
+  required String hint,
+  required bool pinVisible,
+  required VoidCallback? onToggleVisibility,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: _C.card,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: _C.divider, width: 0.8),
+    ),
+    child: TextField(
+      controller: controller,
+      obscureText: !pinVisible,
+      // Angka saja — numericPassword supaya tetap ada tombol done di iOS
+      keyboardType: TextInputType.numberWithOptions(
+        signed: false,
+        decimal: false,
+      ),
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(6),
+      ],
+      style: const TextStyle(
+        fontSize: 13.5,
+        color: _C.textMain,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 4, // Beri spasi antar digit agar terlihat PIN-like
+      ),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(
+          color: _C.textSub,
+          fontSize: 13.5,
+          letterSpacing: 0,
+        ),
+        border: InputBorder.none,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        prefixIcon: const Padding(
+          padding: EdgeInsets.only(left: 12, right: 8),
+          child: Icon(Icons.lock_outline_rounded, color: _C.primary, size: 18),
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        suffixIcon: onToggleVisibility != null
+            ? IconButton(
+                icon: Icon(
+                  pinVisible
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: _C.textSub,
+                  size: 18,
+                ),
+                onPressed: onToggleVisibility,
+              )
+            : null,
+        counterText: '',
+      ),
+    ),
+  );
+}
+
+// ── Field Rupiah — format otomatis saat mengetik ──────────────
+Widget _buildRupiahField({
+  required TextEditingController controller,
+  required String hint,
+  required Color color,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: _C.card,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: _C.divider, width: 0.8),
+    ),
+    child: Row(
+      children: [
+        // Prefix "Rp" dengan border kanan
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: const BoxDecoration(
+            border: Border(right: BorderSide(color: _C.divider, width: 0.8)),
+          ),
+          child: Text(
+            'Rp',
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        // Input area
+        Expanded(
+          child: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number, // numpad angka
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly, // filter dulu
+              RupiahInputFormatter(), // lalu format
+            ],
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: _C.textMain,
+              fontWeight: FontWeight.w500,
+            ),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(color: _C.textSub, fontSize: 13.5),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 13,
+              ),
+              counterText: '',
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ── Field teks biasa (catatan, keterangan) ────────────────────
 Widget _buildTextField({
   required TextEditingController controller,
   required String hint,

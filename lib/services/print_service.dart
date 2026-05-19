@@ -941,4 +941,250 @@ class ThermalPrintService {
     clearConnectionState();
     return _smartConnect(PrinterRole.kasir, force: true);
   }
+
+  // ── PRINT SHIFT SUMMARY (Struk Tutup Shift) ──
+  static Future<bool> printShiftSummary({
+    required Map<String, dynamic> shift,
+    required Map<String, dynamic> ringkasan,
+    String? tokoNama,
+  }) async {
+    return _runKasirJob(() async {
+      try {
+        final p = await getSavedPrinter(role: PrinterRole.kasir);
+        if (p == null) {
+          debugPrint('⚠️ Printer kasir belum dikonfigurasi, skip');
+          return false;
+        }
+        if (!await _smartConnect(PrinterRole.kasir)) {
+          debugPrint('❌ Kasir connect failed');
+          return false;
+        }
+
+        final generator = await _getGenerator();
+        List<int> bytes = _buildShiftSummaryBytes(
+          generator: generator,
+          shift: shift,
+          ringkasan: ringkasan,
+          tokoNama: tokoNama ?? 'Laporan Shift Kasir',
+        );
+
+        await _printer.printData(_kasirPrinter!, bytes).timeout(
+              const Duration(seconds: 15),
+              onTimeout: () => throw TimeoutException('Kasir print timeout'),
+            );
+        _updateLastPrint(PrinterRole.kasir);
+        debugPrint('✅ Shift summary printed');
+        return true;
+      } catch (e) {
+        debugPrint('❌ printShiftSummary error: $e');
+        _markError(PrinterRole.kasir);
+        return false;
+      }
+    });
+  }
+
+  static List<int> _buildShiftSummaryBytes({
+    required Generator generator,
+    required Map<String, dynamic> shift,
+    required Map<String, dynamic> ringkasan,
+    required String tokoNama,
+  }) {
+    List<int> bytes = [];
+
+    // Header
+    bytes += generator.text('TUTUP SHIFT',
+        styles: const PosStyles(
+            align: PosAlign.center,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+            bold: true));
+    bytes += generator.emptyLines(1);
+    bytes += generator.text(tokoNama,
+        styles: const PosStyles(align: PosAlign.center, bold: true));
+
+    bytes += generator.text('================================',
+        styles: const PosStyles(align: PosAlign.center));
+
+    // Detail Kasir & Waktu
+    bytes += generator.row([
+      PosColumn(
+          text: 'Kasir:',
+          width: 4,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text: shift['kasir_nama'] ?? '-',
+          width: 8,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+
+    String opened = shift['opened_at'] ?? '-';
+    String closed = shift['closed_at'] ?? '-';
+    bytes += generator.row([
+      PosColumn(
+          text: 'Buka:',
+          width: 3,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text: opened,
+          width: 9,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(
+          text: 'Tutup:',
+          width: 3,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text: closed,
+          width: 9,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+
+    bytes += generator.text('--------------------------------',
+        styles: const PosStyles(align: PosAlign.center));
+
+    // Ringkasan Penjualan
+    bytes += generator.text('RINGKASAN PENJUALAN',
+        styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.emptyLines(1);
+
+    bytes += generator.row([
+      PosColumn(
+          text: 'Total Order:',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text: '${ringkasan['total_order'] ?? 0}',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(
+          text: 'Total Omset:',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text:
+              'Rp ${_formatRupiah((ringkasan['total_penjualan'] ?? 0).toDouble())}',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+
+    bytes += generator.text('--------------------------------',
+        styles: const PosStyles(align: PosAlign.center));
+
+    // Ringkasan Kas
+    bytes += generator.text('RINGKASAN KAS',
+        styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.emptyLines(1);
+
+    bytes += generator.row([
+      PosColumn(
+          text: 'Kas Awal:',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text: 'Rp ${_formatRupiah((ringkasan['kas_awal'] ?? 0).toDouble())}',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(
+          text: 'Kas Masuk:',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text:
+              '+ Rp ${_formatRupiah((ringkasan['kas_masuk_manual'] ?? 0).toDouble())}',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(
+          text: 'Kas Keluar:',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text:
+              '- Rp ${_formatRupiah((ringkasan['kas_keluar_manual'] ?? 0).toDouble())}',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(
+          text: 'Kas Sistem:',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text:
+              'Rp ${_formatRupiah((ringkasan['kas_sistem'] ?? 0).toDouble())}',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(
+          text: 'Kas Aktual:',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+          text:
+              'Rp ${_formatRupiah((ringkasan['kas_aktual'] ?? 0).toDouble())}',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.right)),
+    ]);
+
+    final selisih = (ringkasan['selisih'] ?? 0).toInt();
+    final isLebih = selisih >= 0;
+    bytes += generator.row([
+      PosColumn(
+          text: 'Selisih:',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.left, bold: true)),
+      PosColumn(
+          text:
+              '${isLebih ? '+' : ''}Rp ${_formatRupiah(selisih.abs().toDouble())}',
+          width: 7,
+          styles: const PosStyles(align: PosAlign.right, bold: true)),
+    ]);
+
+    // Riwayat Cash Flow (Jika ada)
+    final cashFlows = shift['cash_flows'] as List<dynamic>? ?? [];
+    if (cashFlows.isNotEmpty) {
+      bytes += generator.text('--------------------------------',
+          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('RIWAYAT KAS (IN/OUT)',
+          styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.emptyLines(1);
+
+      for (var cf in cashFlows) {
+        final isIn = cf['type'] == 'in';
+        final nominal = _formatRupiah((cf['jumlah'] ?? 0).toDouble());
+        final sign = isIn ? '+' : '-';
+        final ket = cf['keterangan'] ?? (isIn ? 'Masuk' : 'Keluar');
+
+        // Membatasi karakter agar teks tidak terpotong ke bawah/overflow di nota
+        String shortKet = ket.length > 13 ? ket.substring(0, 13) : ket;
+
+        bytes += generator.row([
+          PosColumn(
+              text: shortKet,
+              width: 5,
+              styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(
+              text: '$sign Rp $nominal',
+              width: 7,
+              styles: const PosStyles(align: PosAlign.right)),
+        ]);
+      }
+    }
+
+    bytes += generator.emptyLines(2);
+    bytes += generator.text(
+        'Dicetak: ${DateTime.now().toString().substring(0, 16)}',
+        styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.emptyLines(2);
+    bytes += generator.cut(); // Potong kertas otomatis
+
+    return bytes;
+  }
 }
