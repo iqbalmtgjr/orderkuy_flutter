@@ -1,7 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/history.dart';
 import '../services/api_service.dart';
+import '../services/refund_service.dart';
+import '../utils/constants.dart';
+import '../widgets/refund_dialog.dart';
 
 class RiwayatScreen extends StatefulWidget {
   const RiwayatScreen({super.key});
@@ -18,8 +23,12 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
   int _currentPage = 1;
   int _lastPage = 1;
 
+  // ── TAMBAH: kasirId dari user yang login ──────────────────
+  int _kasirId = 0;
+
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
+  final Map<int, RefundModel?> _refundCache = {};
 
   DateTime? _tanggalDari;
   DateTime? _tanggalSampai;
@@ -29,6 +38,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
   @override
   void initState() {
     super.initState();
+    _loadKasirId(); // ← TAMBAH
     _loadData();
     _scrollController.addListener(_onScroll);
   }
@@ -40,6 +50,25 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     super.dispose();
   }
 
+  // ── TAMBAH: baca kasirId dari SharedPreferences ───────────
+  Future<void> _loadKasirId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userJson = prefs.getString(Constants.userKey);
+      if (userJson != null) {
+        final user = jsonDecode(userJson);
+        // ✅ Aman untuk int maupun String
+        final id = user['id'];
+        if (mounted) {
+          setState(() =>
+              _kasirId = id is int ? id : int.tryParse(id.toString()) ?? 0);
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ _loadKasirId error: $e');
+    }
+  }
+
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
@@ -49,9 +78,38 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     }
   }
 
-  // ✅ PERBAIKAN: Helper format tanggal konsisten — selalu kirim 'yyyy-MM-dd'
   String? _formatDateParam(DateTime? date) =>
       date != null ? DateFormat('yyyy-MM-dd').format(date) : null;
+
+  // ── Sudah ada — tidak diubah ──────────────────────────────
+  Future<void> _loadRefundForOrder(int orderId) async {
+    if (_refundCache.containsKey(orderId)) return;
+    final refund = await RefundService.getRefundByOrder(orderId);
+    if (mounted) setState(() => _refundCache[orderId] = refund);
+  }
+
+  // ── UBAH: kasirId sekarang pakai _kasirId ─────────────────
+  Future<void> _bukaRefundDialog({
+    required int orderId,
+    required double totalOrder,
+    required String nomorOrder,
+  }) async {
+    final result = await showDialog<RefundModel>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => RefundDialog(
+        orderId: orderId,
+        userId: _kasirId,
+        totalOrder: totalOrder.toDouble(),
+        nomorOrder: nomorOrder,
+      ),
+    );
+
+    if (result != null) {
+      setState(() => _refundCache[orderId] = result);
+      _showSnackBar('Permintaan refund berhasil diajukan.');
+    }
+  }
 
   Future<void> _loadData() async {
     if (!mounted) return;
@@ -61,7 +119,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       _orders = [];
     });
 
-    // ✅ PERBAIKAN: Validasi tanggal sebelum request
     if (_tanggalDari != null &&
         _tanggalSampai != null &&
         _tanggalDari!.isAfter(_tanggalSampai!)) {
@@ -72,7 +129,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     }
 
     try {
-      // Load summary & data secara paralel agar lebih cepat
       final results = await Future.wait([
         ApiService.getRiwayatSummary(
           tanggalDari: _formatDateParam(_tanggalDari),
@@ -95,7 +151,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
       final summaryRes = results[0];
       final riwayatRes = results[1];
 
-      // ✅ PERBAIKAN: Cek key 'success' dengan fallback false
       if (summaryRes['success'] == true && summaryRes['data'] != null) {
         setState(() => _summary = RiwayatSummary.fromJson(summaryRes['data']));
       }
@@ -109,7 +164,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
           _isLoading = false;
         });
       } else {
-        // ✅ PERBAIKAN: Tampilkan pesan error dari server jika ada
         setState(() => _isLoading = false);
         _showSnackBar(riwayatRes['message'] ?? 'Gagal memuat data',
             isError: true);
@@ -123,7 +177,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
 
   Future<void> _loadMoreData() async {
     if (_isLoadingMore || _currentPage >= _lastPage) return;
-
     setState(() {
       _isLoadingMore = true;
       _currentPage++;
@@ -150,7 +203,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
           _isLoadingMore = false;
         });
       } else {
-        // ✅ PERBAIKAN: Rollback page dan tampilkan pesan
         setState(() {
           _isLoadingMore = false;
           _currentPage--;
@@ -167,7 +219,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     }
   }
 
-  // ✅ PERBAIKAN: Sentralisasi SnackBar
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -363,13 +414,12 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
               controller: _searchController,
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _loadData(),
-              // ✅ PERBAIKAN: Batasi panjang input search
               maxLength: 100,
               decoration: InputDecoration(
                 hintText: 'Cari kode order atau catatan...',
                 hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 border: InputBorder.none,
-                counterText: '', // sembunyikan counter maxLength
+                counterText: '',
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
               ),
@@ -399,7 +449,11 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     );
   }
 
+  // ── UBAH: tambah _buildRefundRow di bawah card ────────────
   Widget _buildOrderCard(History order) {
+    // Panggil load refund tiap kali card dirender
+    _loadRefundForOrder(order.id);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -412,6 +466,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Baris atas: kode order + badge metode bayar ──
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -452,6 +507,8 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                 ],
               ),
               const Divider(height: 24),
+
+              // ── Baris bawah: info order + total ─────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -476,7 +533,6 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                                   color: Colors.grey.shade600, fontSize: 12)),
                           if (order.meja != null) ...[
                             const SizedBox(width: 8),
-                            // ✅ PERBAIKAN: pakai nomorMeja (konsisten dengan model)
                             Text('• Meja ${order.meja!.nomorMeja}',
                                 style: TextStyle(
                                     color: Colors.grey.shade600, fontSize: 12)),
@@ -494,8 +550,46 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   ),
                 ],
               ),
+
+              // ── TAMBAH: baris refund di bawah ───────────────
+              const SizedBox(height: 8),
+              _buildRefundRow(order),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ── TAMBAH: widget refund row ─────────────────────────────
+  Widget _buildRefundRow(History order) {
+    final refund = _refundCache[order.id];
+
+    // Sedang loading (key belum ada di cache) → kosong
+    if (!_refundCache.containsKey(order.id)) {
+      return const SizedBox.shrink();
+    }
+
+    // Sudah ada refund → tampilkan badge
+    if (refund != null) {
+      return _RefundBadge(status: refund.status);
+    }
+
+    // Belum ada refund → tombol Refund
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton.icon(
+        onPressed: () => _bukaRefundDialog(
+          orderId: order.id,
+          totalOrder: order.totalHarga,
+          nomorOrder: order.kodeOrder,
+        ),
+        icon: const Icon(Icons.assignment_return_rounded, size: 16),
+        label: const Text('Refund'),
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.orange.shade700,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          textStyle: const TextStyle(fontSize: 13),
         ),
       ),
     );
@@ -525,6 +619,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     );
   }
 
+  // ── UBAH: tambah tombol/badge refund di detail bottom sheet ─
   void _showOrderDetail(History order) {
     showModalBottomSheet(
       context: context,
@@ -610,6 +705,10 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   ),
                 ],
               ),
+
+              // ── TAMBAH: refund section di detail ────────────
+              const SizedBox(height: 20),
+              _buildRefundSection(order),
             ],
           ),
         ),
@@ -617,21 +716,196 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     );
   }
 
+  // ── TAMBAH: section refund di dalam detail bottom sheet ───
+  Widget _buildRefundSection(History order) {
+    final refund = _refundCache[order.id];
+
+    if (refund != null) {
+      // Ada refund — tampilkan info detail
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: refund.isApproved
+              ? Colors.green.shade50
+              : refund.isRejected
+                  ? Colors.red.shade50
+                  : Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: refund.isApproved
+                ? Colors.green.shade200
+                : refund.isRejected
+                    ? Colors.red.shade200
+                    : Colors.orange.shade200,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.assignment_return_rounded,
+                    size: 16,
+                    color: refund.isApproved
+                        ? Colors.green.shade700
+                        : refund.isRejected
+                            ? Colors.red.shade700
+                            : Colors.orange.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  'Info Refund',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: refund.isApproved
+                        ? Colors.green.shade700
+                        : refund.isRejected
+                            ? Colors.red.shade700
+                            : Colors.orange.shade700,
+                  ),
+                ),
+                const Spacer(),
+                _RefundBadge(status: refund.status),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _buildDetailRow(
+                'Jumlah', _formatRupiah(refund.jumlahRefund.toDouble())),
+            _buildDetailRow('Metode', refund.metodeRefund),
+            _buildDetailRow('Alasan', refund.alasan),
+            if (refund.catatan != null && refund.catatan!.isNotEmpty)
+              _buildDetailRow('Catatan', refund.catatan!),
+          ],
+        ),
+      );
+    }
+
+    // Belum ada refund → tombol ajukan
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          Navigator.pop(context); // tutup bottom sheet dulu
+          _bukaRefundDialog(
+            orderId: order.id,
+            totalOrder: order.totalHarga,
+            nomorOrder: order.kodeOrder,
+          );
+        },
+        icon: Icon(Icons.assignment_return_rounded,
+            size: 18, color: Colors.orange.shade700),
+        label: Text('Ajukan Refund',
+            style: TextStyle(color: Colors.orange.shade700)),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: Colors.orange.shade300),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+          SizedBox(
+            width: 110,
+            child: Text(label,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(value,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+          ),
         ],
       ),
     );
   }
 }
 
-// ── Filter Bottom Sheet ───────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Widget _RefundBadge
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RefundBadge extends StatelessWidget {
+  final String status; // pending | approved | rejected
+
+  const _RefundBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final config = _config();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: config.bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(config.icon, size: 13, color: config.fgColor),
+          const SizedBox(width: 4),
+          Text(
+            config.label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: config.fgColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _BadgeConfig _config() {
+    switch (status) {
+      case 'approved':
+        return _BadgeConfig(
+          label: 'Sudah Direfund',
+          icon: Icons.check_circle_outline,
+          bgColor: Colors.green.shade50,
+          fgColor: Colors.green.shade700,
+        );
+      case 'rejected':
+        return _BadgeConfig(
+          label: 'Refund Ditolak',
+          icon: Icons.cancel_outlined,
+          bgColor: Colors.red.shade50,
+          fgColor: Colors.red.shade700,
+        );
+      default:
+        return _BadgeConfig(
+          label: 'Refund Diproses',
+          icon: Icons.hourglass_empty_rounded,
+          bgColor: Colors.orange.shade50,
+          fgColor: Colors.orange.shade700,
+        );
+    }
+  }
+}
+
+class _BadgeConfig {
+  final String label;
+  final IconData icon;
+  final Color bgColor;
+  final Color fgColor;
+  const _BadgeConfig({
+    required this.label,
+    required this.icon,
+    required this.bgColor,
+    required this.fgColor,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter Bottom Sheet — tidak ada perubahan dari versi kamu
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _FilterBottomSheet extends StatefulWidget {
   final DateTime? tanggalDari;
   final DateTime? tanggalSampai;
@@ -658,7 +932,6 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
   DateTime? _tanggalSampai;
   int? _jenisOrder;
   int? _metodePembayaran;
-  // ✅ TAMBAHAN: error message untuk validasi tanggal
   String? _tanggalError;
 
   @override
@@ -687,20 +960,17 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
     setState(() {
       if (isDari) {
         _tanggalDari = date;
-        // ✅ PERBAIKAN: Reset tanggal akhir jika lebih awal dari tanggal baru
         if (_tanggalSampai != null && _tanggalSampai!.isBefore(date)) {
           _tanggalSampai = date;
         }
       } else {
         _tanggalSampai = date;
       }
-      // Hapus error setelah dipilih ulang
       _tanggalError = null;
     });
   }
 
   void _onApply() {
-    // ✅ PERBAIKAN: Validasi tanggal sebelum apply
     if (_tanggalDari != null &&
         _tanggalSampai != null &&
         _tanggalDari!.isAfter(_tanggalSampai!)) {
@@ -766,7 +1036,6 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
               ),
             ],
           ),
-          // ✅ TAMBAHAN: Tampilkan error validasi tanggal
           if (_tanggalError != null) ...[
             const SizedBox(height: 6),
             Text(_tanggalError!,

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../services/api_service.dart';
 import '../services/print_service.dart';
+import '../services/payment_method_service.dart'; // ← TAMBAH INI
 import '../models/product.dart';
 import '../models/kategori.dart';
 import '../models/meja.dart';
@@ -74,7 +77,13 @@ class _KasirScreenState extends State<KasirScreen>
   final bool _isBackgroundLoading = false;
 
   int _jenisOrder = Constants.jenisOrderDineIn;
-  int _metodeBayar = Constants.metodeBayarCash;
+
+  // ── PERUBAHAN: ganti int _metodeBayar → Map _selectedPaymentMethod ──
+  List<Map<String, dynamic>> _paymentMethods = [];
+  Map<String, dynamic>? _selectedPaymentMethod;
+  bool _paymentMethodsLoading = false;
+  // ────────────────────────────────────────────────────────────────────
+
   int? _selectedMejaId;
   String _catatan = '';
 
@@ -92,7 +101,6 @@ class _KasirScreenState extends State<KasirScreen>
   bool _isBottomPanelExpanded = false;
   AnimationController? _panelController;
 
-  // Navy blue palette
   static const Color _primaryColor = Color(0xFF1a315b);
   static const Color _primaryLight = Color(0xFF2a4a7f);
   static const Color _primaryDark = Color(0xFF0f2040);
@@ -108,6 +116,39 @@ class _KasirScreenState extends State<KasirScreen>
   static double _parseNominalBayar(String text) {
     final digitsOnly = text.replaceAll(RegExp(r'[^\d]'), '');
     return double.tryParse(digitsOnly) ?? 0;
+  }
+
+  // ── Helper: apakah metode bayar yang dipilih adalah tunai? ──
+  bool get _isCash {
+    if (_selectedPaymentMethod == null) return true;
+    final kode =
+        (_selectedPaymentMethod!['kode'] as String?)?.toUpperCase() ?? '';
+    final nama =
+        (_selectedPaymentMethod!['nama'] as String?)?.toUpperCase() ?? '';
+    return kode == 'CASH' ||
+        kode == 'TUNAI' ||
+        nama == 'TUNAI' ||
+        nama == 'CASH';
+  }
+
+  // ── Helper: icon per kode metode bayar ──────────────────────
+  IconData _getPaymentIcon(String kode) {
+    switch (kode.toUpperCase()) {
+      case 'CASH':
+      case 'TUNAI':
+        return Icons.payments_outlined;
+      case 'QRIS':
+        return Icons.qr_code_rounded;
+      case 'TF':
+      case 'TRANSFER':
+        return Icons.account_balance_outlined;
+      case 'EDC':
+      case 'DEBIT':
+      case 'KREDIT':
+        return Icons.credit_card_rounded;
+      default:
+        return Icons.payment_rounded;
+    }
   }
 
   void _addDigitToNominal(String digit, StateSetter setDialogState) {
@@ -158,6 +199,7 @@ class _KasirScreenState extends State<KasirScreen>
     );
 
     _loadData();
+    _loadPaymentMethods(); // ← TAMBAH INI
     _checkConnectivity();
     _listenToConnectivity();
 
@@ -171,7 +213,6 @@ class _KasirScreenState extends State<KasirScreen>
     if (widget.orderToEdit != null) {
       final order = widget.orderToEdit!;
       _jenisOrder = order.jenisOrder;
-      _metodeBayar = order.metodeBayar;
       _selectedMejaId = order.mejaId;
       _catatan = order.catatan ?? '';
       _catatanController.text = _catatan;
@@ -187,7 +228,6 @@ class _KasirScreenState extends State<KasirScreen>
           'has_options': item.opsiDipilih.isNotEmpty,
         });
       }
-
       _calculateTotals();
     }
   }
@@ -200,6 +240,43 @@ class _KasirScreenState extends State<KasirScreen>
     _catatanController.dispose();
     super.dispose();
   }
+
+  // ── BARU: Load payment methods dari API ─────────────────────
+  Future<void> _loadPaymentMethods() async {
+    setState(() => _paymentMethodsLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userJson = prefs.getString(Constants.userKey);
+      if (userJson == null) return;
+
+      final user = jsonDecode(userJson);
+      final tokoId = user['toko_id'] as int? ?? 0;
+      if (tokoId == 0) return;
+
+      final methods = await PaymentMethodService.getPaymentMethods(tokoId);
+
+      setState(() {
+        _paymentMethods = methods;
+        // Default: pilih metode pertama (biasanya Tunai)
+        if (methods.isNotEmpty && _selectedPaymentMethod == null) {
+          _selectedPaymentMethod = methods.first;
+        }
+        _paymentMethodsLoading = false;
+      });
+    } catch (e) {
+      debugPrint('❌ _loadPaymentMethods error: $e');
+      setState(() {
+        _paymentMethods = [
+          {'id': null, 'nama': 'Tunai', 'kode': 'CASH'},
+          {'id': null, 'nama': 'Transfer', 'kode': 'TF'},
+          {'id': null, 'nama': 'QRIS', 'kode': 'QRIS'},
+        ];
+        _selectedPaymentMethod = _paymentMethods.first;
+        _paymentMethodsLoading = false;
+      });
+    }
+  }
+  // ────────────────────────────────────────────────────────────
 
   void _togglePanel() {
     setState(() => _isBottomPanelExpanded = !_isBottomPanelExpanded);
@@ -232,7 +309,6 @@ class _KasirScreenState extends State<KasirScreen>
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    debugPrint('🔄 Loading data (Offline-First Strategy)...');
     try {
       final products = await ApiService.getMenusOfflineFirst(
         onDataUpdated: (freshProducts) {
@@ -241,21 +317,12 @@ class _KasirScreenState extends State<KasirScreen>
               _products = freshProducts;
               _applyFilters();
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('✅ Data menu diperbarui dari server'),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 2),
-              ),
-            );
           }
         },
       );
       final kategoris = await ApiService.getKategorisOfflineFirst(
         onDataUpdated: (freshKategoris) {
-          if (mounted) {
-            setState(() => _kategoris = freshKategoris);
-          }
+          if (mounted) setState(() => _kategoris = freshKategoris);
         },
       );
       final mejas = widget.orderToEdit != null
@@ -271,43 +338,15 @@ class _KasirScreenState extends State<KasirScreen>
     } catch (e) {
       debugPrint('❌ Error loading data: $e');
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error memuat data: ${e.toString()}'),
-            backgroundColor: _primaryColor,
-            action: SnackBarAction(
-              label: 'Coba Lagi',
-              textColor: Colors.white,
-              onPressed: _loadData,
-            ),
-          ),
-        );
-      }
     }
   }
 
   Future<void> _forceRefreshData() async {
-    if (!_isOnline) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tidak bisa refresh saat offline'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+    if (!_isOnline) return;
     setState(() => _isLoading = true);
     await DBHelper.clearAllCache();
     await _loadData();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Data berhasil di-refresh'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
+    await _loadPaymentMethods(); // ← refresh payment methods juga
   }
 
   void _applyFilters() {
@@ -335,58 +374,29 @@ class _KasirScreenState extends State<KasirScreen>
       return;
     }
 
-    // BARU: Jika menu punya opsi, tampilkan dialog pilih opsi dulu
     if (product.hasOptions && product.optionGroups.isNotEmpty) {
       final result = await OptionPickerDialog.show(
         context,
         product: product,
         initialQty: qty,
       );
-
-      // User batal / tutup dialog
       if (result == null || !mounted) return;
 
-      final selectedQty = result['qty'] as int;
-      final optionItemIds = result['option_item_ids'] as List<int>;
-      final hargaPerItem = result['harga_per_item'] as double;
-
       setState(() {
-        // Menu dengan opsi selalu jadi item terpisah (tidak digabung)
-        // karena pilihan opsinya bisa berbeda
         _selectedItems.add({
           'menu_id': product.id,
           'nama_produk': product.namaProduk,
-          'harga': hargaPerItem, // harga sudah include opsi
-          'harga_dasar': product.harga, // simpan harga asli untuk referensi
-          'qty': selectedQty,
-          'option_item_ids': optionItemIds,
+          'harga': result['harga_per_item'] as double,
+          'harga_dasar': product.harga,
+          'qty': result['qty'] as int,
+          'option_item_ids': result['option_item_ids'] as List<int>,
           'has_options': true,
         });
         _calculateTotals();
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                Text('${product.namaProduk} ditambahkan'),
-              ],
-            ),
-            backgroundColor: Colors.green.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      }
       return;
     }
 
-    // Menu tanpa opsi — logika lama, tidak berubah
     setState(() {
       final existingIndex = _selectedItems.indexWhere(
         (item) => item['menu_id'] == product.id && item['has_options'] != true,
@@ -405,67 +415,24 @@ class _KasirScreenState extends State<KasirScreen>
       }
       _calculateTotals();
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Text('${product.namaProduk} ditambahkan'),
-            ],
-          ),
-          backgroundColor: Colors.green.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
   }
 
   Future<void> _editCartItemOptions(
       int index, Map<String, dynamic> item) async {
     final menuId = item['menu_id'] as int;
-    debugPrint('🔍 Edit opsi: menuId=$menuId, products=${_products.length}');
-
-    if (_products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data menu sedang dimuat, coba lagi...')),
-      );
-      return;
-    }
-
     Product? product;
     try {
       product = _products.firstWhere((p) => p.id == menuId);
     } catch (_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Produk tidak ditemukan di daftar menu')),
-      );
       return;
     }
-
-    // FIX: jangan andalkan product.hasOptions — percayai flag di cart item
-    // product.hasOptions bisa false jika cache belum sinkron
-    if (product.optionGroups.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data opsi tidak tersedia, coba refresh menu'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+    if (product.optionGroups.isEmpty) return;
 
     final result = await OptionPickerDialog.show(
       context,
       product: product,
       initialQty: item['qty'] as int,
     );
-
     if (result == null || !mounted) return;
 
     setState(() {
@@ -475,25 +442,6 @@ class _KasirScreenState extends State<KasirScreen>
       _selectedItems[index]['harga'] = result['harga_per_item'] as double;
       _calculateTotals();
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Text('Opsi ${item['nama_produk']} diperbarui'),
-            ],
-          ),
-          backgroundColor: Colors.green.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
   }
 
   void _removeFromCart(int index) {
@@ -524,21 +472,18 @@ class _KasirScreenState extends State<KasirScreen>
 
   Future<void> _showPaymentDialog() async {
     if (_selectedItems.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Keranjang masih kosong')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keranjang masih kosong')),
+      );
       return;
     }
     if (_jenisOrder == Constants.jenisOrderDineIn && _selectedMejaId == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pilih meja terlebih dahulu')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih meja terlebih dahulu')),
+      );
       return;
     }
+
     await showDialog(
       context: context,
       builder: (context) {
@@ -584,36 +529,15 @@ class _KasirScreenState extends State<KasirScreen>
                             ],
                           ),
                         ),
+
+                      // ── Item list ──────────────────────────────────
                       const Text('Item Pesanan:',
                           style: TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       ..._selectedItems.map((item) {
-                        final hasOptions = item['has_options'] == true;
-                        final optionItemIds =
-                            (item['option_item_ids'] as List?)?.cast<int>() ??
-                                [];
                         final subtotal =
                             (item['qty'] as int) * (item['harga'] as double);
-
-                        // Kumpulkan nama opsi yang dipilih
-                        final opsiLabels = <String>[];
-                        if (hasOptions && optionItemIds.isNotEmpty) {
-                          try {
-                            final menuId = item['menu_id'] as int;
-                            final product =
-                                _products.firstWhere((p) => p.id == menuId);
-                            for (var group in product.optionGroups) {
-                              for (var optItem in group.items) {
-                                if (optionItemIds.contains(optItem.id)) {
-                                  opsiLabels
-                                      .add('${group.nama}: ${optItem.nama}');
-                                }
-                              }
-                            }
-                          } catch (_) {}
-                        }
-
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.symmetric(
@@ -621,158 +545,209 @@ class _KasirScreenState extends State<KasirScreen>
                           decoration: BoxDecoration(
                             color: Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: hasOptions
-                                  ? _primaryColor.withValues(alpha: 0.3)
-                                  : Colors.grey.shade200,
-                            ),
+                            border: Border.all(color: Colors.grey.shade200),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Kiri: nama + qty x harga + sub-varian
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    Text(item['nama_produk'],
+                                        style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600)),
                                     Text(
-                                      item['nama_produk'],
-                                      style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${item['qty']} x ${_currencyFormat.format(item['harga'])}',
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade600),
-                                    ),
-                                    // ── Sub-varian ─────────────────────────────
-                                    if (opsiLabels.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFe8eef5),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: opsiLabels
-                                              .map((label) => Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            bottom: 2),
-                                                    child: Row(
-                                                      children: [
-                                                        Container(
-                                                          width: 4,
-                                                          height: 4,
-                                                          margin:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                                  right: 6,
-                                                                  top: 2),
-                                                          decoration:
-                                                              const BoxDecoration(
-                                                            color: Color(
-                                                                0xFF1a315b),
-                                                            shape:
-                                                                BoxShape.circle,
-                                                          ),
-                                                        ),
-                                                        Text(
-                                                          label,
-                                                          style:
-                                                              const TextStyle(
-                                                            fontSize: 11,
-                                                            color: Color(
-                                                                0xFF1a315b),
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ))
-                                              .toList(),
-                                        ),
-                                      ),
-                                    ],
+                                        '${item['qty']} x ${_currencyFormat.format(item['harga'])}',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey.shade600)),
                                   ],
                                 ),
                               ),
-                              // Kanan: subtotal
-                              const SizedBox(width: 12),
-                              Text(
-                                _currencyFormat.format(subtotal),
-                                style: const TextStyle(
-                                    fontSize: 15, fontWeight: FontWeight.w600),
-                              ),
+                              Text(_currencyFormat.format(subtotal),
+                                  style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600)),
                             ],
                           ),
                         );
                       }),
+
                       const SizedBox(height: 20),
                       Text(
                         'Total: ${_currencyFormat.format(_totalHarga)}',
                         style: const TextStyle(
                             fontSize: 22, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: _nominalBayarController,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w600),
-                        decoration: InputDecoration(
-                          labelText: 'Nominal Bayar',
-                          hintText: 'Rp 0',
-                          border: const OutlineInputBorder(),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey.shade400),
-                          ),
-                          focusedBorder: const OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: _primaryColor,
-                              width: 2,
+                      const SizedBox(height: 16),
+
+                      // ── BARU: Pilih metode bayar di dialog ──────────
+                      const Text('Metode Bayar:',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      if (_paymentMethodsLoading)
+                        const Center(
+                            child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2)))
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _paymentMethods.map((method) {
+                            final isSelected =
+                                _selectedPaymentMethod?['id'] == method['id'] &&
+                                    _selectedPaymentMethod?['kode'] ==
+                                        method['kode'];
+                            return GestureDetector(
+                              onTap: () {
+                                setDialogState(
+                                    () => _selectedPaymentMethod = method);
+                                setState(() {}); // update _isCash
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 9),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? _primaryColor
+                                      : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? _primaryColor
+                                        : Colors.grey.shade300,
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: _primaryColor.withValues(
+                                                alpha: 0.2),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          )
+                                        ]
+                                      : [],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _getPaymentIcon(method['kode'] ?? ''),
+                                      size: 16,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      method['nama'] ?? '-',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.w500,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      const SizedBox(height: 16),
+
+                      // ── Nominal bayar — hanya tampil jika tunai ─────
+                      if (_isCash) ...[
+                        TextField(
+                          controller: _nominalBayarController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
+                            labelText: 'Nominal Bayar',
+                            hintText: 'Rp 0',
+                            border: const OutlineInputBorder(),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade400),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderSide:
+                                  BorderSide(color: _primaryColor, width: 2),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () {
+                                _nominalBayarController.clear();
+                                setDialogState(() => _kembalian = -_totalHarga);
+                              },
                             ),
                           ),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 16),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.grey),
-                            onPressed: () {
-                              _nominalBayarController.clear();
-                              setDialogState(() => _kembalian = -_totalHarga);
-                            },
+                          inputFormatters: [_RupiahInputFormatter()],
+                          onChanged: (value) {
+                            setDialogState(() {
+                              final nominal = _parseNominalBayar(value);
+                              _kembalian = nominal - _totalHarga;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildNumericKeypad(setDialogState),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Kembalian: ${_currencyFormat.format(_kembalian)}',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: _kembalian < 0 ? Colors.red : Colors.green,
                           ),
                         ),
-                        inputFormatters: [_RupiahInputFormatter()],
-                        onChanged: (value) {
-                          setDialogState(() {
-                            final nominal = _parseNominalBayar(value);
-                            _kembalian = nominal - _totalHarga;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildNumericKeypad(setDialogState),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Kembalian: ${_currencyFormat.format(_kembalian)}',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: _kembalian < 0 ? Colors.red : Colors.green,
+                      ] else ...[
+                        // Non-tunai — tidak perlu input nominal
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _getPaymentIcon(
+                                    _selectedPaymentMethod?['kode'] ?? ''),
+                                color: Colors.blue.shade700,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Pembayaran via ${_selectedPaymentMethod?['nama'] ?? '-'}',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -786,7 +761,8 @@ class _KasirScreenState extends State<KasirScreen>
             ),
             ElevatedButton(
               onPressed: () {
-                if (_kembalian < 0) {
+                // ── PERUBAHAN: validasi nominal hanya untuk tunai ──
+                if (_isCash && _kembalian < 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Nominal bayar kurang')),
                   );
@@ -829,9 +805,11 @@ class _KasirScreenState extends State<KasirScreen>
       ),
     );
 
+    // ── PERUBAHAN: kirim metode_bayar_id juga ────────────────
     final orderData = {
       'jenis_order': _jenisOrder,
-      'metode_bayar': _metodeBayar,
+      'metode_bayar': _isCash ? 1 : 2, // backward compat field lama
+      'metode_bayar_id': _selectedPaymentMethod?['id'], // field baru (nullable)
       'meja_id':
           _jenisOrder == Constants.jenisOrderDineIn ? _selectedMejaId : null,
       'catatan': _catatan,
@@ -839,21 +817,14 @@ class _KasirScreenState extends State<KasirScreen>
           .map((item) => {
                 'menu_id': item['menu_id'],
                 'qty': item['qty'],
-                'harga': item['harga_dasar'] ??
-                    item['harga'], // kirim harga DASAR ke server
+                'harga': item['harga_dasar'] ?? item['harga'],
                 'option_item_ids':
                     (item['option_item_ids'] as List?)?.cast<int>() ?? [],
               })
           .toList(),
       'total_harga': _totalHarga,
     };
-
-    debugPrint('📦 Items dikirim:');
-    for (var item in _selectedItems) {
-      debugPrint(
-          '  ${item['nama_produk']} → option_item_ids: ${item['option_item_ids']}');
-    }
-    debugPrint('📦 Full orderData: $orderData');
+    // ────────────────────────────────────────────────────────
 
     final isEditing = widget.orderToEdit != null;
     final result = isEditing
@@ -875,18 +846,18 @@ class _KasirScreenState extends State<KasirScreen>
               children: [
                 CircularProgressIndicator(color: Colors.white),
                 SizedBox(height: 16),
-                Text('Mencetak struk & nota dapur...',
+                Text('Mencetak struk...',
                     style: TextStyle(color: Colors.white, fontSize: 14)),
               ],
             ),
           ),
         );
         final printResults = await _printAll(result['data']);
-        final kasirOk = printResults[0];
-        final dapurOk = printResults[1];
         if (!mounted) return;
         Navigator.pop(context);
 
+        final kasirOk = printResults[0];
+        final dapurOk = printResults[1];
         String msg;
         Color bgColor;
         if (kasirOk && dapurOk) {
@@ -897,22 +868,17 @@ class _KasirScreenState extends State<KasirScreen>
         } else if (kasirOk && !dapurOk) {
           msg = 'Pesanan disimpan. Struk kasir OK, printer dapur gagal.';
           bgColor = Colors.orange;
-        } else if (!kasirOk && dapurOk) {
-          msg = 'Pesanan disimpan. Nota dapur OK, printer kasir gagal.';
-          bgColor = Colors.orange;
         } else {
           msg = isEditing
-              ? 'Pesanan diperbarui, tapi kedua printer gagal mencetak.'
-              : 'Pesanan disimpan, tapi kedua printer gagal mencetak.';
+              ? 'Pesanan diperbarui, tapi printer gagal.'
+              : 'Pesanan disimpan, tapi printer gagal.';
           bgColor = Colors.orange;
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(msg),
-                backgroundColor: bgColor,
-                duration: const Duration(seconds: 3)),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(msg),
+              backgroundColor: bgColor,
+              duration: const Duration(seconds: 3)));
         }
       } else {
         if (mounted) {
@@ -965,16 +931,13 @@ class _KasirScreenState extends State<KasirScreen>
         if (found.isNotEmpty) mejaNo = found.first.noMeja;
       }
 
-      // FIX: build items dengan label opsi untuk dicetak
       final itemsForPrint = _selectedItems.map((item) {
         final hasOptions = item['has_options'] == true;
         String opsiLabel = '';
-
         if (hasOptions) {
           final menuId = item['menu_id'] as int;
           final optionItemIds =
               (item['option_item_ids'] as List?)?.cast<int>() ?? [];
-
           if (optionItemIds.isNotEmpty) {
             try {
               final product = _products.firstWhere((p) => p.id == menuId);
@@ -990,29 +953,212 @@ class _KasirScreenState extends State<KasirScreen>
             } catch (_) {}
           }
         }
-
         return {
           ...item,
           if (opsiLabel.isNotEmpty) 'opsi': opsiLabel,
         };
       }).toList();
 
+      // ── PERUBAHAN: kirim nama metode bayar ke printer ──────
+      final metodeBayarInt = _isCash ? 1 : 2;
+
       return await ThermalPrintService.printAll(
         orderId: orderData['id']?.toString() ?? '',
         tokoNama: tokoNama,
         tokoAlamat: tokoAlamat,
-        items: itemsForPrint, // ← pakai itemsForPrint, bukan _selectedItems
+        items: itemsForPrint,
         totalHarga: _totalHarga,
         jenisOrder: _jenisOrder,
         mejaNo: mejaNo,
         catatan: _catatan,
-        metodeBayar: _metodeBayar,
+        metodeBayar: metodeBayarInt,
         kasirNama: kasirNama,
       );
     } catch (e) {
       debugPrint('❌ _printAll error: $e');
       return [false, false];
     }
+  }
+
+  // ── _getOrderSummaryLine — PERUBAHAN: pakai nama dari object ─
+  String _getOrderSummaryLine() {
+    final jenis =
+        _jenisOrder == Constants.jenisOrderDineIn ? 'Dine In' : 'Take Away';
+    final bayar = _selectedPaymentMethod?['nama'] ?? 'Tunai'; // ← PERUBAHAN
+    String mejaText = '';
+    if (_jenisOrder == Constants.jenisOrderDineIn && _selectedMejaId != null) {
+      final found = _mejas.where((m) => m.id == _selectedMejaId);
+      if (found.isNotEmpty) mejaText = ' · Meja ${found.first.noMeja}';
+    }
+    return '$jenis · $bayar$mejaText';
+  }
+
+  // ── _buildPaymentMethodSelector (TABLET) — PERUBAHAN ────────
+  Widget _buildPaymentMethodSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Metode Bayar',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        if (_paymentMethodsLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _paymentMethods.map((method) {
+              final isSelected =
+                  _selectedPaymentMethod?['id'] == method['id'] &&
+                      _selectedPaymentMethod?['kode'] == method['kode'];
+              return GestureDetector(
+                onTap: () => setState(() => _selectedPaymentMethod = method),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: isSelected ? _primaryColor : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected ? _primaryColor : _primarySurfaceDeep,
+                      width: 1.5,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: _primaryColor.withValues(alpha: 0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            )
+                          ]
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            )
+                          ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _getPaymentIcon(method['kode'] ?? ''),
+                        size: 16,
+                        color: isSelected ? Colors.white : _primaryColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        method['nama'] ?? '-',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  // ── Widget metode bayar untuk mobile bottom panel ─────────
+  Widget _buildPaymentMethodSegmentMobile() {
+    if (_paymentMethodsLoading) {
+      return const SizedBox(
+        height: 56,
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Metode Bayar',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 11,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: _paymentMethods.map((method) {
+            final isSelected = _selectedPaymentMethod?['id'] == method['id'] &&
+                _selectedPaymentMethod?['kode'] == method['kode'];
+            return GestureDetector(
+              onTap: () => setState(() => _selectedPaymentMethod = method),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? _primaryColor : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected ? _primaryColor : Colors.grey.shade300,
+                    width: 1,
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: _primaryColor.withValues(alpha: 0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : [],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _getPaymentIcon(method['kode'] ?? ''),
+                      size: 14,
+                      color: isSelected ? Colors.white : Colors.grey.shade500,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      method['nama'] ?? '-',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? Colors.white : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
   }
 
   static const double _breakpointTablet = 600;
@@ -1065,7 +1211,7 @@ class _KasirScreenState extends State<KasirScreen>
                   builder: (context) => AlertDialog(
                     title: const Text('Konfirmasi'),
                     content: const Text(
-                        'Ada item di keranjang. Yakin ingin keluar?\nData akan hilang.'),
+                        'Ada item di keranjang. Yakin ingin keluar?'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context, false),
@@ -1087,27 +1233,10 @@ class _KasirScreenState extends State<KasirScreen>
               }
             },
           ),
-          title: Row(
-            children: [
-              Text(
-                isEditing ? 'Edit Pesanan' : 'Kasir',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (_isBackgroundLoading) ...[
-                const SizedBox(width: 12),
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                ),
-              ],
-            ],
+          title: Text(
+            isEditing ? 'Edit Pesanan' : 'Kasir',
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold),
           ),
           flexibleSpace: Container(
             decoration: const BoxDecoration(
@@ -1186,12 +1315,9 @@ class _KasirScreenState extends State<KasirScreen>
                   ? const Center(child: CircularProgressIndicator())
                   : _filteredProducts.isEmpty
                       ? Center(
-                          child: Text(
-                            !_isOnline && _products.isEmpty
-                                ? 'Menu tidak tersedia offline.'
-                                : 'Tidak ada menu',
-                          ),
-                        )
+                          child: Text(!_isOnline && _products.isEmpty
+                              ? 'Menu tidak tersedia offline.'
+                              : 'Tidak ada menu'))
                       : GridView.builder(
                           padding: const EdgeInsets.fromLTRB(8, 8, 8, 90),
                           gridDelegate:
@@ -1262,11 +1388,8 @@ class _KasirScreenState extends State<KasirScreen>
                           color: _primaryColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
-                          Icons.shopping_cart_rounded,
-                          color: _primaryColor,
-                          size: 24,
-                        ),
+                        child: const Icon(Icons.shopping_cart_rounded,
+                            color: _primaryColor, size: 24),
                       ),
                       if (_totalItem > 0)
                         Positioned(
@@ -1279,18 +1402,13 @@ class _KasirScreenState extends State<KasirScreen>
                               shape: BoxShape.circle,
                             ),
                             constraints: const BoxConstraints(
-                              minWidth: 20,
-                              minHeight: 20,
-                            ),
-                            child: Text(
-                              '$_totalItem',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                                minWidth: 20, minHeight: 20),
+                            child: Text('$_totalItem',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center),
                           ),
                         ),
                     ],
@@ -1313,17 +1431,14 @@ class _KasirScreenState extends State<KasirScreen>
                                 : Colors.grey.shade400,
                           ),
                         ),
-                        Text(
-                          _getOrderSummaryLine(),
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade500),
-                        ),
+                        Text(_getOrderSummaryLine(),
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade500)),
                       ],
                     ),
                   ),
                   if (_totalItem > 0) ...[
                     ElevatedButton(
-                      // FIX: sama, edit langsung simpan
                       onPressed: isEditing ? _savePesanan : _showPaymentDialog,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryColor,
@@ -1370,9 +1485,8 @@ class _KasirScreenState extends State<KasirScreen>
 
   Widget _buildExpandedContent(bool isEditing) {
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.65,
-      ),
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.65),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(
@@ -1406,26 +1520,8 @@ class _KasirScreenState extends State<KasirScreen>
                   ],
                 )),
                 const SizedBox(width: 12),
-                Expanded(
-                    child: _buildCompactSegment(
-                  label: 'Metode Bayar',
-                  options: [
-                    _SegmentOption(
-                      label: 'Cash',
-                      icon: Icons.payments_outlined,
-                      isSelected: _metodeBayar == Constants.metodeBayarCash,
-                      onTap: () => setState(
-                          () => _metodeBayar = Constants.metodeBayarCash),
-                    ),
-                    _SegmentOption(
-                      label: 'Transfer',
-                      icon: Icons.account_balance_outlined,
-                      isSelected: _metodeBayar == Constants.metodeBayarTransfer,
-                      onTap: () => setState(
-                          () => _metodeBayar = Constants.metodeBayarTransfer),
-                    ),
-                  ],
-                )),
+                // ── PERUBAHAN: ganti segment hardcode → dinamis ──
+                Expanded(child: _buildPaymentMethodSegmentMobile()),
               ],
             ),
             if (_jenisOrder == Constants.jenisOrderDineIn) ...[
@@ -1462,7 +1558,6 @@ class _KasirScreenState extends State<KasirScreen>
             const SizedBox(height: 8),
             _buildCartItems(),
             const SizedBox(height: 10),
-            // Summary card — clean navy style
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
@@ -1513,7 +1608,6 @@ class _KasirScreenState extends State<KasirScreen>
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
-                // FIX: edit = langsung simpan, bukan lewat payment dialog
                 onPressed: isEditing ? _savePesanan : _showPaymentDialog,
                 icon: Icon(isEditing ? Icons.update : Icons.payment,
                     color: Colors.white),
@@ -1547,84 +1641,73 @@ class _KasirScreenState extends State<KasirScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
-                color: Colors.grey.shade600)),
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 11,
+            color: Colors.grey.shade600,
+          ),
+        ),
         const SizedBox(height: 5),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: options.map((opt) {
-              return Expanded(
-                child: GestureDetector(
-                  onTap: opt.onTap,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    decoration: BoxDecoration(
-                      color:
-                          opt.isSelected ? _primaryColor : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: opt.isSelected
-                          ? [
-                              BoxShadow(
-                                color: _primaryColor.withValues(alpha: 0.25),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              )
-                            ]
-                          : [],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(opt.icon,
-                            size: 16,
-                            color: opt.isSelected
-                                ? Colors.white
-                                : Colors.grey.shade500),
-                        const SizedBox(height: 2),
-                        Text(
-                          opt.label,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: opt.isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: opt.isSelected
-                                ? Colors.white
-                                : Colors.grey.shade500,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: options.map((opt) {
+            return GestureDetector(
+              onTap: opt.onTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: opt.isSelected ? _primaryColor : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color:
+                        opt.isSelected ? _primaryColor : Colors.grey.shade300,
+                    width: 1,
                   ),
+                  boxShadow: opt.isSelected
+                      ? [
+                          BoxShadow(
+                            color: _primaryColor.withValues(alpha: 0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : [],
                 ),
-              );
-            }).toList(),
-          ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      opt.icon,
+                      size: 14,
+                      color:
+                          opt.isSelected ? Colors.white : Colors.grey.shade500,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      opt.label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: opt.isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: opt.isSelected
+                            ? Colors.white
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     );
-  }
-
-  String _getOrderSummaryLine() {
-    final jenis =
-        _jenisOrder == Constants.jenisOrderDineIn ? 'Dine In' : 'Take Away';
-    final bayar =
-        _metodeBayar == Constants.metodeBayarCash ? 'Cash' : 'Transfer';
-    String mejaText = '';
-    if (_jenisOrder == Constants.jenisOrderDineIn && _selectedMejaId != null) {
-      final found = _mejas.where((m) => m.id == _selectedMejaId);
-      if (found.isNotEmpty) mejaText = ' · Meja ${found.first.noMeja}';
-    }
-    return '$jenis · $bayar$mejaText';
   }
 
   Widget _buildTabletLayout(bool isEditing) {
@@ -1672,7 +1755,6 @@ class _KasirScreenState extends State<KasirScreen>
             ],
           ),
         ),
-        // Sidebar panel — clean navy gradient
         Expanded(
           flex: 2,
           child: Container(
@@ -1682,14 +1764,6 @@ class _KasirScreenState extends State<KasirScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x1a1a315b),
-                  spreadRadius: 2,
-                  blurRadius: 12,
-                  offset: Offset(-2, 0),
-                ),
-              ],
             ),
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -1698,7 +1772,7 @@ class _KasirScreenState extends State<KasirScreen>
                 children: [
                   _buildOrderTypeSelector(),
                   const SizedBox(height: 16),
-                  _buildPaymentMethodSelector(),
+                  _buildPaymentMethodSelector(), // ← sudah dinamis
                   const SizedBox(height: 16),
                   if (_jenisOrder == Constants.jenisOrderDineIn)
                     _buildTableSelector(),
@@ -1723,15 +1797,8 @@ class _KasirScreenState extends State<KasirScreen>
                         backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
                         elevation: 4,
-                        shadowColor: _primaryColor.withValues(alpha: 0.3),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
-                      ).copyWith(
-                        backgroundColor: WidgetStateProperty.resolveWith<Color>(
-                          (states) => states.contains(WidgetState.hovered)
-                              ? _primaryDark
-                              : _primaryColor,
-                        ),
                       ),
                       child: Text(
                         isEditing ? 'Update & Simpan' : 'Bayar & Simpan',
@@ -1824,7 +1891,6 @@ class _KasirScreenState extends State<KasirScreen>
 
     return Card(
       elevation: isMobile ? 2 : 4,
-      margin: isMobile ? const EdgeInsets.symmetric(horizontal: 2) : null,
       shadowColor: _primaryColor.withValues(alpha: 0.15),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
@@ -1848,10 +1914,9 @@ class _KasirScreenState extends State<KasirScreen>
                           '$baseUrl${product.foto}',
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Icon(
-                            Icons.restaurant_menu,
-                            size: iconSize,
-                            color: _primaryLight,
-                          ),
+                              Icons.restaurant_menu,
+                              size: iconSize,
+                              color: _primaryLight),
                         ),
                       )
                     : Icon(Icons.restaurant_menu,
@@ -1875,23 +1940,17 @@ class _KasirScreenState extends State<KasirScreen>
                         style: priceStyle),
                     SizedBox(height: isMobile ? 2 : 4),
                     product.useStock
-                        ? Text(
-                            'Stok: ${product.qty}',
+                        ? Text('Stok: ${product.qty}',
                             style: TextStyle(
-                              fontSize: isMobile ? 10 : 12,
-                              color: product.qty <= 5
-                                  ? Colors.orange
-                                  : Colors.grey,
-                            ),
-                          )
-                        : Text(
-                            'Tersedia',
+                                fontSize: isMobile ? 10 : 12,
+                                color: product.qty <= 5
+                                    ? Colors.orange
+                                    : Colors.grey))
+                        : Text('Tersedia',
                             style: TextStyle(
-                              fontSize: isMobile ? 10 : 12,
-                              color: Colors.green.shade600,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                                fontSize: isMobile ? 10 : 12,
+                                color: Colors.green.shade600,
+                                fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
@@ -1909,69 +1968,132 @@ class _KasirScreenState extends State<KasirScreen>
         const Text('Jenis Order',
             style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(
-              child: ChoiceChip(
-                label: const Text('Dine In',
-                    style: TextStyle(color: Colors.white, fontSize: 14)),
-                selected: _jenisOrder == Constants.jenisOrderDineIn,
-                selectedColor: _primaryColor,
-                backgroundColor: _primarySurfaceDeep,
-                onSelected: (_) =>
-                    setState(() => _jenisOrder = Constants.jenisOrderDineIn),
+            GestureDetector(
+              onTap: () =>
+                  setState(() => _jenisOrder = Constants.jenisOrderDineIn),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _jenisOrder == Constants.jenisOrderDineIn
+                      ? _primaryColor
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _jenisOrder == Constants.jenisOrderDineIn
+                        ? _primaryColor
+                        : _primarySurfaceDeep,
+                    width: 1.5,
+                  ),
+                  boxShadow: _jenisOrder == Constants.jenisOrderDineIn
+                      ? [
+                          BoxShadow(
+                            color: _primaryColor.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          )
+                        ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.restaurant,
+                      size: 16,
+                      color: _jenisOrder == Constants.jenisOrderDineIn
+                          ? Colors.white
+                          : _primaryColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Dine In',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: _jenisOrder == Constants.jenisOrderDineIn
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                        color: _jenisOrder == Constants.jenisOrderDineIn
+                            ? Colors.white
+                            : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ChoiceChip(
-                label: const Text('Take Away',
-                    style: TextStyle(color: Colors.white, fontSize: 14)),
-                selected: _jenisOrder == Constants.jenisOrderTakeAway,
-                selectedColor: _primaryColor,
-                backgroundColor: _primarySurfaceDeep,
-                onSelected: (_) => setState(() {
-                  _jenisOrder = Constants.jenisOrderTakeAway;
-                  _selectedMejaId = null;
-                }),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPaymentMethodSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Metode Bayar',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: ChoiceChip(
-                label: const Text('Cash',
-                    style: TextStyle(color: Colors.white, fontSize: 14)),
-                selected: _metodeBayar == Constants.metodeBayarCash,
-                selectedColor: _primaryColor,
-                backgroundColor: _primarySurfaceDeep,
-                onSelected: (_) =>
-                    setState(() => _metodeBayar = Constants.metodeBayarCash),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ChoiceChip(
-                label: const Text('Transfer',
-                    style: TextStyle(color: Colors.white, fontSize: 14)),
-                selected: _metodeBayar == Constants.metodeBayarTransfer,
-                selectedColor: _primaryColor,
-                backgroundColor: _primarySurfaceDeep,
-                onSelected: (_) => setState(
-                    () => _metodeBayar = Constants.metodeBayarTransfer),
+            GestureDetector(
+              onTap: () => setState(() {
+                _jenisOrder = Constants.jenisOrderTakeAway;
+                _selectedMejaId = null;
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _jenisOrder == Constants.jenisOrderTakeAway
+                      ? _primaryColor
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _jenisOrder == Constants.jenisOrderTakeAway
+                        ? _primaryColor
+                        : _primarySurfaceDeep,
+                    width: 1.5,
+                  ),
+                  boxShadow: _jenisOrder == Constants.jenisOrderTakeAway
+                      ? [
+                          BoxShadow(
+                            color: _primaryColor.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          )
+                        ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.takeout_dining,
+                      size: 16,
+                      color: _jenisOrder == Constants.jenisOrderTakeAway
+                          ? Colors.white
+                          : _primaryColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Take Away',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: _jenisOrder == Constants.jenisOrderTakeAway
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                        color: _jenisOrder == Constants.jenisOrderTakeAway
+                            ? Colors.white
+                            : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -1987,8 +2109,6 @@ class _KasirScreenState extends State<KasirScreen>
         const Text('Pilih Meja', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          // FIX: pakai `value` (reactive) bukan `initialValue` (one-shot)
-          // null-safe: jika _mejas belum load, value = null (tidak crash)
           initialValue: _mejas.any((m) => m.id == _selectedMejaId)
               ? _selectedMejaId
               : null,
@@ -2058,14 +2178,12 @@ class _KasirScreenState extends State<KasirScreen>
           elevation: 1,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
-            // Highlight border untuk item yang punya opsi
             side: hasOptions
                 ? BorderSide(
                     color: _primaryColor.withValues(alpha: 0.35), width: 1.2)
                 : BorderSide.none,
           ),
           child: InkWell(
-            // Klik item untuk edit opsi (hanya jika punya opsi)
             onTap: hasOptions ? () => _editCartItemOptions(index, item) : null,
             borderRadius: BorderRadius.circular(10),
             child: Padding(
@@ -2076,49 +2194,14 @@ class _KasirScreenState extends State<KasirScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          item['nama_produk'],
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 13),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          _currencyFormat.format(item['harga']),
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600),
-                        ),
-                        if (hasOptions) ...[
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFe8eef5),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: const [
-                                    Icon(Icons.tune,
-                                        size: 10, color: Color(0xFF1a315b)),
-                                    SizedBox(width: 3),
-                                    Text(
-                                      'Punya opsi · Ketuk untuk edit',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Color(0xFF1a315b),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                        Text(item['nama_produk'],
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        Text(_currencyFormat.format(item['harga']),
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600)),
                       ],
                     ),
                   ),
@@ -2202,12 +2285,6 @@ class _KasirScreenState extends State<KasirScreen>
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
             color: _primaryColor.withValues(alpha: 0.12), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-              color: _primaryColor.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2)),
-        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2238,23 +2315,15 @@ class _KasirScreenState extends State<KasirScreen>
           const SizedBox(height: 10),
           Row(children: [
             Expanded(
-              child: _buildKeypadActionButton(
-                'Clear',
-                Icons.clear_all,
-                Colors.orange.shade700,
-                () => _clearNominal(setDialogState),
-              ),
+              child: _buildKeypadActionButton('Clear', Icons.clear_all,
+                  Colors.orange.shade700, () => _clearNominal(setDialogState)),
             ),
             const SizedBox(width: 10),
             Expanded(flex: 2, child: _buildKeypadButton('0', setDialogState)),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildKeypadActionButton(
-                'Del',
-                Icons.backspace,
-                _primaryColor,
-                () => _removeDigitFromNominal(setDialogState),
-              ),
+              child: _buildKeypadActionButton('Del', Icons.backspace,
+                  _primaryColor, () => _removeDigitFromNominal(setDialogState)),
             ),
           ]),
         ],
@@ -2267,7 +2336,6 @@ class _KasirScreenState extends State<KasirScreen>
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       elevation: 2,
-      shadowColor: _primaryColor.withValues(alpha: 0.1),
       child: InkWell(
         onTap: () => _addDigitToNominal(digit, setDialogState),
         borderRadius: BorderRadius.circular(12),
@@ -2297,7 +2365,6 @@ class _KasirScreenState extends State<KasirScreen>
       color: color,
       borderRadius: BorderRadius.circular(12),
       elevation: 2,
-      shadowColor: color.withValues(alpha: 0.3),
       child: InkWell(
         onTap: onPressed,
         borderRadius: BorderRadius.circular(12),
@@ -2305,11 +2372,6 @@ class _KasirScreenState extends State<KasirScreen>
           height: 60,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              colors: [color, color.withValues(alpha: 0.85)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

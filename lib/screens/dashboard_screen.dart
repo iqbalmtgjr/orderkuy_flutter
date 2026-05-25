@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:kasvo_kasir/screens/pengeluaran_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
-import '../services/shift_service.dart'; // ← TAMBAHAN
+import '../services/shift_service.dart';
 import 'login_screen.dart';
 import 'pesanan_screen.dart';
 import 'riwayat_screen.dart';
 import 'printer_setup_screen.dart';
 import 'absensi_screen.dart';
-import 'shift_screen.dart'; // ← TAMBAHAN
+import 'shift_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RESPONSIVE HELPER
@@ -98,18 +99,20 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
+  // ── SharedPreferences keys untuk cache shift ────────────────
+  static const _kShiftAktif = 'cached_shift_aktif';
+  static const _kShiftData = 'cached_shift_data';
+
   String _userName = '';
   String _userRole = '';
   String _tokoNama = '';
   bool _isLoading = true;
   bool _saldoVisible = true;
 
-  // ── TAMBAHAN: variabel shift & user identity ──────────────────────────────
   int _tokoId = 0;
   int _userId = 0;
   Map<String, dynamic>? _shiftAktif;
   bool _shiftLoading = false;
-  // ─────────────────────────────────────────────────────────────────────────
 
   double _uangDiOutlet = 0;
   double _pengeluaran = 0;
@@ -140,7 +143,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.dispose();
   }
 
-  // ── DIUBAH: tambah load tokoId, userId, lalu panggil _cekShiftAktif ───────
   Future<void> _loadUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -151,17 +153,16 @@ class _DashboardScreenState extends State<DashboardScreen>
           _userName = user['name'] ?? 'Kasir';
           _userRole = user['role'] ?? 'kasir';
           _tokoNama = user['toko_nama'] ?? 'Kasvo';
-          _tokoId = user['toko_id'] ?? 0; // ← TAMBAHAN
-          _userId = user['id'] ?? 0; // ← TAMBAHAN
+          _tokoId = user['toko_id'] ?? 0;
+          _userId = user['id'] ?? 0;
         });
         _animationController?.forward();
-        _cekShiftAktif(); // ← TAMBAHAN: cek shift setelah user data siap
+        _cekShiftAktif();
       }
     } catch (e) {
       debugPrint('Error loading user data: $e');
     }
   }
-  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _loadDashboardStats() async {
     setState(() => _isLoading = true);
@@ -185,33 +186,62 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  // ── TAMBAHAN: cek shift aktif ─────────────────────────────────────────────
+  // ── Cek shift aktif — dengan offline cache ──────────────────
   Future<void> _cekShiftAktif() async {
     if (_tokoId == 0 || _userId == 0) return;
     setState(() => _shiftLoading = true);
+
+    // Cek koneksi terlebih dahulu
+    final conn = await Connectivity().checkConnectivity();
+    final isOnline = conn != ConnectivityResult.none;
+
+    if (!isOnline) {
+      // OFFLINE: gunakan cache terakhir, jangan redirect ke buka shift
+      final cached = await _loadShiftCache();
+      setState(() {
+        _shiftAktif = cached;
+        _shiftLoading = false;
+      });
+      debugPrint(
+          '📵 Offline — shift dari cache: ${cached != null ? "aktif" : "tidak ada cache"}');
+      return;
+    }
+
+    // ONLINE: tanya server
     try {
       final res = await ShiftService.cekShiftAktif(
         tokoId: _tokoId,
         userId: _userId,
       );
+
       if (res['shift_aktif'] == true) {
+        final shiftData = res['shift'] as Map<String, dynamic>;
+        await _saveShiftCache(shiftData);
         setState(() {
-          _shiftAktif = res['shift'];
+          _shiftAktif = shiftData;
           _shiftLoading = false;
         });
       } else {
-        setState(() => _shiftLoading = false);
-        // Shift belum aktif → langsung arahkan ke ShiftScreen
+        // Server konfirmasi shift memang tidak aktif
+        await _clearShiftCache();
+        setState(() {
+          _shiftAktif = null;
+          _shiftLoading = false;
+        });
         if (mounted) _bukaShiftScreen();
       }
     } catch (e) {
       debugPrint('Error cek shift: $e');
-      setState(() => _shiftLoading = false);
+      // Error saat online → fallback ke cache, jangan paksa buka shift
+      final cached = await _loadShiftCache();
+      setState(() {
+        _shiftAktif = cached;
+        _shiftLoading = false;
+      });
     }
   }
 
-  // ── TAMBAHAN: buka ShiftScreen ────────────────────────────────────────────
-  // SESUDAH
+  // ── Buka ShiftScreen ────────────────────────────────────────
   void _bukaShiftScreen() {
     Navigator.push(
       context,
@@ -219,22 +249,49 @@ class _DashboardScreenState extends State<DashboardScreen>
         builder: (_) => ShiftScreen(
           tokoId: _tokoId,
           userId: _userId,
-          onShiftOpened: (user, shift) {
+          onShiftOpened: (user, shift) async {
+            await _saveShiftCache(shift);
             setState(() => _shiftAktif = shift);
           },
-          onShiftClosed: () {
-            // Shift ditutup → hapus status aktif di dashboard
+          onShiftClosed: () async {
+            await _clearShiftCache();
             setState(() => _shiftAktif = null);
           },
         ),
       ),
     ).then((_) {
-      // Jaga-jaga: re-cek dari server saat kembali ke dashboard
-      // (menangkap kasus tutup shift tanpa callback, misal back button)
       _cekShiftAktif();
     });
   }
-  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Helper: simpan shift ke cache ───────────────────────────
+  Future<void> _saveShiftCache(Map<String, dynamic> shift) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kShiftAktif, true);
+    await prefs.setString(_kShiftData, jsonEncode(shift));
+    debugPrint('✅ Shift cache saved');
+  }
+
+  /// Muat shift dari cache. Return null jika belum pernah disimpan.
+  Future<Map<String, dynamic>?> _loadShiftCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final aktif = prefs.getBool(_kShiftAktif) ?? false;
+    final rawJson = prefs.getString(_kShiftData);
+    if (!aktif || rawJson == null) return null;
+    try {
+      return jsonDecode(rawJson) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Hapus cache shift (shift ditutup / server bilang tidak aktif).
+  Future<void> _clearShiftCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kShiftAktif);
+    await prefs.remove(_kShiftData);
+    debugPrint('🗑️ Shift cache cleared');
+  }
 
   Future<void> _logout() async {
     final r = _R(
@@ -285,6 +342,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       ),
     );
     if (confirm == true) {
+      await _clearShiftCache();
       await ApiService.logout();
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -336,7 +394,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _buildHeaderWithCard(r)),
-        // ── TAMBAHAN: banner shift (hanya tampil jika shift belum aktif) ────
         if (!_shiftLoading && _shiftAktif == null)
           SliverToBoxAdapter(
             child: Padding(
@@ -345,7 +402,6 @@ class _DashboardScreenState extends State<DashboardScreen>
               child: _buildShiftBanner(r),
             ),
           ),
-        // ── TAMBAHAN: info shift aktif (tampil jika shift sudah aktif) ──────
         if (_shiftAktif != null)
           SliverToBoxAdapter(
             child: Padding(
@@ -354,7 +410,6 @@ class _DashboardScreenState extends State<DashboardScreen>
               child: _buildShiftAktifInfo(r),
             ),
           ),
-        // ────────────────────────────────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
             padding:
@@ -374,7 +429,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── TAMBAHAN: banner peringatan shift belum aktif ─────────────────────────
   Widget _buildShiftBanner(_R r) {
     return GestureDetector(
       onTap: _bukaShiftScreen,
@@ -409,7 +463,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── TAMBAHAN: info shift aktif ringkas ────────────────────────────────────
   Widget _buildShiftAktifInfo(_R r) {
     return GestureDetector(
       onTap: _bukaShiftScreen,
@@ -455,7 +508,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       ),
     );
   }
-  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _buildTabletLandscapeLayout(_R r) {
     return Row(
@@ -474,7 +526,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(height: r.sh * 0.04),
-                  // ── TAMBAHAN: banner/info shift di tablet ────────────────
                   if (!_shiftLoading && _shiftAktif == null)
                     Padding(
                       padding: EdgeInsets.only(bottom: r.sectionGap),
@@ -485,7 +536,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                       padding: EdgeInsets.only(bottom: r.sectionGap),
                       child: _buildShiftAktifInfo(r),
                     ),
-                  // ─────────────────────────────────────────────────────────
                   _buildSaldoCard(r),
                   SizedBox(height: r.sectionGap),
                   _buildTransactionSummary(r),
@@ -1108,7 +1158,6 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   List<_MenuData> _getMenuData() {
     return [
-      // ── TAMBAHAN: menu Shift ──────────────────────────────────────────────
       _MenuData(
         icon: Icons.access_time_rounded,
         label: 'Shift',
@@ -1116,7 +1165,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         bgColor: const Color(0xFFE0F2F1),
         onTap: _bukaShiftScreen,
       ),
-      // ─────────────────────────────────────────────────────────────────────
       _MenuData(
         icon: Icons.point_of_sale_rounded,
         label: 'Kasir',
@@ -1133,14 +1181,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTap: () => Navigator.push(
             context, MaterialPageRoute(builder: (_) => const RiwayatScreen())),
       ),
-      // _MenuData(
-      //   icon: Icons.money_off_csred_rounded,
-      //   label: 'Pengeluaran',
-      //   color: const Color(0xFF1565C0),
-      //   bgColor: const Color(0xFFEFF4FF),
-      //   onTap: () => Navigator.push(context,
-      //       MaterialPageRoute(builder: (_) => const PengeluaranScreen())),
-      // ),
       _MenuData(
         icon: Icons.fingerprint_rounded,
         label: 'Absensi',
@@ -1461,16 +1501,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     return names[month];
   }
 
-  // ── TAMBAHAN: helper format angka ─────────────────────────────────────────
   String _fmt(dynamic val) {
     if (val == null) return '0';
     final n = (val is num) ? val.toInt() : (int.tryParse(val.toString()) ?? 0);
     return n.abs().toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
   }
-  // ─────────────────────────────────────────────────────────────────────────
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WAVE CLIPPER
+// ─────────────────────────────────────────────────────────────────────────────
 class _BottomWaveClipper extends CustomClipper<Path> {
   final double curveHeight;
   _BottomWaveClipper(this.curveHeight);
@@ -1494,6 +1535,9 @@ class _BottomWaveClipper extends CustomClipper<Path> {
   bool shouldReclip(_BottomWaveClipper old) => old.curveHeight != curveHeight;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MENU DATA MODEL
+// ─────────────────────────────────────────────────────────────────────────────
 class _MenuData {
   final IconData icon;
   final String label;
