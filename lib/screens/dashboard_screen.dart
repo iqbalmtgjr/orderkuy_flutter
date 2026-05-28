@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:kasvo_kasir/screens/pengeluaran_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:convert';
@@ -11,6 +10,7 @@ import 'riwayat_screen.dart';
 import 'printer_setup_screen.dart';
 import 'absensi_screen.dart';
 import 'shift_screen.dart';
+import 'pengeluaran_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RESPONSIVE HELPER
@@ -169,12 +169,41 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _loadDashboardStats() async {
     setState(() => _isLoading = true);
     try {
+      // Baca shift_mode langsung dari prefs agar tidak bergantung urutan
+      // inisialisasi (race condition dengan _loadUserData).
+      final prefs = await SharedPreferences.getInstance();
+      final userJson = prefs.getString('user');
+      final bool shiftModeLocal = userJson != null
+          ? (jsonDecode(userJson)['shift_mode'] ?? true) as bool
+          : true;
+
       final response = await ApiService.getDashboardStats();
       if (response['success']) {
         final data = response['data'];
+        double pengeluaran = (data['pengeluaran'] ?? 0).toDouble();
+
+        // Ketika shift_mode = false, API menghitung pengeluaran per shift
+        // sehingga hasilnya 0. Fetch pengeluaran hari ini secara terpisah.
+        if (!shiftModeLocal) {
+          final now = DateTime.now();
+          final today =
+              '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+          try {
+            final penRes = await ApiService.getPengeluaran(
+              tanggalAwal: today,
+              tanggalAkhir: today,
+            );
+            if (penRes['success'] == true) {
+              pengeluaran = (penRes['total_pengeluaran'] ?? 0).toDouble();
+            }
+          } catch (e) {
+            debugPrint('Error fetch pengeluaran harian: $e');
+          }
+        }
+
         setState(() {
           _uangDiOutlet = (data['uang_di_outlet'] ?? 0).toDouble();
-          _pengeluaran = (data['pengeluaran'] ?? 0).toDouble();
+          _pengeluaran = pengeluaran;
           _transfer = (data['transfer'] ?? 0).toDouble();
           _cash = (data['cash'] ?? 0).toDouble();
           _isLoading = false;
@@ -979,6 +1008,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildSaldoCard(_R r) {
+    // shift aktif  → uang_di_outlet (kas awal + cash - pengeluaran dari server)
+    // shift nonaktif → cash hari ini - pengeluaran hari ini
+    final double saldoValue =
+        _shiftMode ? _uangDiOutlet : (_cash - _pengeluaran);
+
     return Container(
       padding: EdgeInsets.all(r.cardPad),
       decoration: BoxDecoration(
@@ -1010,7 +1044,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                   SizedBox(width: r.sw * 0.016),
                   Text(
-                    'Uang di Outlet',
+                    'Uang Kasir',
                     style: TextStyle(
                       color: Colors.grey.shade500,
                       fontSize: r.fontSm,
@@ -1043,7 +1077,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   alignment: Alignment.centerLeft,
                   child: Text(
                     _saldoVisible
-                        ? _formatRupiah(_uangDiOutlet)
+                        ? _formatRupiah(saldoValue)
                         : 'Rp ••••••••',
                     style: TextStyle(
                       color: const Color(0xFF111111),
@@ -1168,6 +1202,15 @@ class _DashboardScreenState extends State<DashboardScreen>
           color: const Color(0xFF00796B),
           bgColor: const Color(0xFFE0F2F1),
           onTap: _bukaShiftScreen,
+        ),
+      if (!_shiftMode)
+        _MenuData(
+          icon: Icons.receipt_long_rounded,
+          label: 'Pengeluaran',
+          color: const Color(0xFFE65100),
+          bgColor: const Color(0xFFFFF3EE),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const PengeluaranScreen())),
         ),
       _MenuData(
         icon: Icons.point_of_sale_rounded,

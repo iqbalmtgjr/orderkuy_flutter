@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/refund_service.dart';
 import '../utils/constants.dart';
 import '../widgets/refund_dialog.dart';
+import '../widgets/invoice_share_widget.dart';
 
 class RiwayatScreen extends StatefulWidget {
   const RiwayatScreen({super.key});
@@ -25,6 +26,8 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
 
   // ── TAMBAH: kasirId dari user yang login ──────────────────
   int _kasirId = 0;
+  String _tokoNama = '';
+  String _tokoAlamat = '';
 
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -50,18 +53,23 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     super.dispose();
   }
 
-  // ── TAMBAH: baca kasirId dari SharedPreferences ───────────
+  // ── TAMBAH: baca kasirId & toko dari SharedPreferences ───────────
   Future<void> _loadKasirId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString(Constants.userKey);
       if (userJson != null) {
         final user = jsonDecode(userJson);
-        // ✅ Aman untuk int maupun String
         final id = user['id'];
+        final toko = user['toko'];
         if (mounted) {
-          setState(() =>
-              _kasirId = id is int ? id : int.tryParse(id.toString()) ?? 0);
+          setState(() {
+            _kasirId = id is int ? id : int.tryParse(id.toString()) ?? 0;
+            if (toko is Map) {
+              _tokoNama = toko['nama_toko']?.toString() ?? '';
+              _tokoAlamat = toko['alamat']?.toString() ?? '';
+            }
+          });
         }
       }
     } catch (e) {
@@ -619,6 +627,17 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     );
   }
 
+  void _showInvoiceDialog(History order) {
+    showDialog(
+      context: context,
+      builder: (_) => InvoiceShareDialog(
+        order: order,
+        tokoNama: _tokoNama,
+        tokoAlamat: _tokoAlamat,
+      ),
+    );
+  }
+
   // ── UBAH: tambah tombol/badge refund di detail bottom sheet ─
   void _showOrderDetail(History order) {
     showModalBottomSheet(
@@ -709,6 +728,26 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
               // ── TAMBAH: refund section di detail ────────────
               const SizedBox(height: 20),
               _buildRefundSection(order),
+
+              // ── Tombol bagikan invoice ───────────────────────
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showInvoiceDialog(order),
+                  icon: const Icon(Icons.share_rounded, size: 18),
+                  label: const Text('Bagikan Invoice',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1a315b),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

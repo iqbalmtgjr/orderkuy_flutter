@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,32 +16,7 @@ import 'printer_setup_screen.dart';
 import '../widgets/sync_status_widget.dart';
 import '../core/database/db_helper.dart';
 import '../widgets/option_picker_dialog.dart';
-
-class _RupiahInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
-    if (digitsOnly.isEmpty) {
-      return const TextEditingValue(
-        text: '',
-        selection: TextSelection.collapsed(offset: 0),
-      );
-    }
-    final number = int.tryParse(digitsOnly) ?? 0;
-    final formatted = number.toString().replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]}.',
-        );
-    final fullText = 'Rp $formatted';
-    return TextEditingValue(
-      text: fullText,
-      selection: TextSelection.collapsed(offset: fullText.length),
-    );
-  }
-}
+import 'payment_confirmation_screen.dart';
 
 class _SegmentOption {
   final String label;
@@ -94,10 +68,8 @@ class _KasirScreenState extends State<KasirScreen>
   double _totalHarga = 0;
   int _totalItem = 0;
 
-  final TextEditingController _nominalBayarController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _catatanController = TextEditingController();
-  double _kembalian = 0;
 
   bool _isBottomPanelExpanded = false;
   AnimationController? _panelController;
@@ -113,11 +85,6 @@ class _KasirScreenState extends State<KasirScreen>
     symbol: 'Rp ',
     decimalDigits: 0,
   );
-
-  static double _parseNominalBayar(String text) {
-    final digitsOnly = text.replaceAll(RegExp(r'[^\d]'), '');
-    return double.tryParse(digitsOnly) ?? 0;
-  }
 
   // ── Helper: apakah metode bayar yang dipilih adalah tunai? ──
   bool get _isCash {
@@ -150,45 +117,6 @@ class _KasirScreenState extends State<KasirScreen>
       default:
         return Icons.payment_rounded;
     }
-  }
-
-  void _addDigitToNominal(String digit, StateSetter setDialogState) {
-    final currentText = _nominalBayarController.text;
-    final digitsOnly = currentText.replaceAll(RegExp(r'[^\d]'), '');
-    final newDigits = digitsOnly + digit;
-    final newValue = int.tryParse(newDigits) ?? 0;
-    final formatted = newValue.toString().replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]}.',
-        );
-    _nominalBayarController.text = 'Rp $formatted';
-    final nominal = _parseNominalBayar(_nominalBayarController.text);
-    setDialogState(() => _kembalian = nominal - _totalHarga);
-  }
-
-  void _removeDigitFromNominal(StateSetter setDialogState) {
-    final currentText = _nominalBayarController.text;
-    final digitsOnly = currentText.replaceAll(RegExp(r'[^\d]'), '');
-    if (digitsOnly.isEmpty) return;
-    final newDigits = digitsOnly.substring(0, digitsOnly.length - 1);
-    if (newDigits.isEmpty) {
-      _nominalBayarController.text = '';
-      setDialogState(() => _kembalian = -_totalHarga);
-      return;
-    }
-    final newValue = int.tryParse(newDigits) ?? 0;
-    final formatted = newValue.toString().replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]}.',
-        );
-    _nominalBayarController.text = 'Rp $formatted';
-    final nominal = _parseNominalBayar(_nominalBayarController.text);
-    setDialogState(() => _kembalian = nominal - _totalHarga);
-  }
-
-  void _clearNominal(StateSetter setDialogState) {
-    _nominalBayarController.text = '';
-    setDialogState(() => _kembalian = -_totalHarga);
   }
 
   @override
@@ -237,7 +165,6 @@ class _KasirScreenState extends State<KasirScreen>
   void dispose() {
     _connectivitySub?.cancel();
     _panelController?.dispose();
-    _nominalBayarController.dispose();
     _searchController.dispose();
     _catatanController.dispose();
     super.dispose();
@@ -298,11 +225,12 @@ class _KasirScreenState extends State<KasirScreen>
 
   void _listenToConnectivity() {
     _connectivitySub?.cancel();
-    _connectivitySub =
-        Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+    _connectivitySub = Connectivity()
+        .onConnectivityChanged
+        .listen((List<ConnectivityResult> results) {
       if (!mounted) return;
-      final isConnected =
-          results.isNotEmpty && results.any((r) => r != ConnectivityResult.none);
+      final isConnected = results.isNotEmpty &&
+          results.any((r) => r != ConnectivityResult.none);
       setState(() => _isOnline = isConnected);
       if (isConnected) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -493,308 +421,44 @@ class _KasirScreenState extends State<KasirScreen>
       return;
     }
 
-    await showDialog(
-      context: context,
-      builder: (context) {
-        final screenWidth = MediaQuery.of(context).size.width;
-        final dialogWidth = screenWidth > 500 ? 480.0 : screenWidth * 0.92;
-        return AlertDialog(
-          title: const Text('Konfirmasi Pesanan',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          contentPadding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
-          titlePadding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
-          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-          content: StatefulBuilder(
-            builder: (context, setDialogState) {
-              return SizedBox(
-                width: dialogWidth,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!_isOnline)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.cloud_off,
-                                  size: 20, color: Colors.orange.shade900),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Mode Offline: Pesanan akan tersimpan lokal',
-                                  style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.orange.shade900),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+    // Attach resolved option labels so the confirmation screen can display them
+    final itemsWithOpsi = _selectedItems.map((item) {
+      if (item['has_options'] != true) return item;
+      final optionItemIds =
+          (item['option_item_ids'] as List?)?.cast<int>() ?? [];
+      if (optionItemIds.isEmpty) return item;
+      try {
+        final product =
+            _products.firstWhere((p) => p.id == item['menu_id']);
+        final names = <String>[];
+        for (final group in product.optionGroups) {
+          for (final opt in group.items) {
+            if (optionItemIds.contains(opt.id)) names.add(opt.nama);
+          }
+        }
+        if (names.isNotEmpty) return {...item, 'opsi': names.join(', ')};
+      } catch (_) {}
+      return item;
+    }).toList();
 
-                      // ── Item list ──────────────────────────────────
-                      const Text('Item Pesanan:',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      ..._selectedItems.map((item) {
-                        final subtotal =
-                            (item['qty'] as int) * (item['harga'] as double);
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(item['nama_produk'],
-                                        style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600)),
-                                    Text(
-                                        '${item['qty']} x ${_currencyFormat.format(item['harga'])}',
-                                        style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey.shade600)),
-                                  ],
-                                ),
-                              ),
-                              Text(_currencyFormat.format(subtotal),
-                                  style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        );
-                      }),
-
-                      const SizedBox(height: 20),
-                      Text(
-                        'Total: ${_currencyFormat.format(_totalHarga)}',
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── BARU: Pilih metode bayar di dialog ──────────
-                      const Text('Metode Bayar:',
-                          style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      if (_paymentMethodsLoading)
-                        const Center(
-                            child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2)))
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _paymentMethods.map((method) {
-                            final isSelected =
-                                _selectedPaymentMethod?['id'] == method['id'] &&
-                                    _selectedPaymentMethod?['kode'] ==
-                                        method['kode'];
-                            return GestureDetector(
-                              onTap: () {
-                                setDialogState(
-                                    () => _selectedPaymentMethod = method);
-                                setState(() {}); // update _isCash
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 9),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? _primaryColor
-                                      : Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? _primaryColor
-                                        : Colors.grey.shade300,
-                                    width: 1.5,
-                                  ),
-                                  boxShadow: isSelected
-                                      ? [
-                                          BoxShadow(
-                                            color: _primaryColor.withValues(
-                                                alpha: 0.2),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          )
-                                        ]
-                                      : [],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _getPaymentIcon(method['kode'] ?? ''),
-                                      size: 16,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : Colors.grey.shade600,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      method['nama'] ?? '-',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: isSelected
-                                            ? FontWeight.bold
-                                            : FontWeight.w500,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      const SizedBox(height: 16),
-
-                      // ── Nominal bayar — hanya tampil jika tunai ─────
-                      if (_isCash) ...[
-                        TextField(
-                          controller: _nominalBayarController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w600),
-                          decoration: InputDecoration(
-                            labelText: 'Nominal Bayar',
-                            hintText: 'Rp 0',
-                            border: const OutlineInputBorder(),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade400),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderSide:
-                                  BorderSide(color: _primaryColor, width: 2),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 16),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.grey),
-                              onPressed: () {
-                                _nominalBayarController.clear();
-                                setDialogState(() => _kembalian = -_totalHarga);
-                              },
-                            ),
-                          ),
-                          inputFormatters: [_RupiahInputFormatter()],
-                          onChanged: (value) {
-                            setDialogState(() {
-                              final nominal = _parseNominalBayar(value);
-                              _kembalian = nominal - _totalHarga;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _buildNumericKeypad(setDialogState),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Kembalian: ${_currencyFormat.format(_kembalian)}',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: _kembalian < 0 ? Colors.red : Colors.green,
-                          ),
-                        ),
-                      ] else ...[
-                        // Non-tunai — tidak perlu input nominal
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.blue.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _getPaymentIcon(
-                                    _selectedPaymentMethod?['kode'] ?? ''),
-                                color: Colors.blue.shade700,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Pembayaran via ${_selectedPaymentMethod?['nama'] ?? '-'}',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    color: Colors.blue.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal', style: TextStyle(fontSize: 16)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                // ── PERUBAHAN: validasi nominal hanya untuk tunai ──
-                if (_isCash && _kembalian < 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Nominal bayar kurang')),
-                  );
-                  return;
-                }
-                Navigator.pop(context);
-                _savePesanan();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryColor,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              child:
-                  const Text('Bayar & Simpan', style: TextStyle(fontSize: 16)),
-            ),
-          ],
-        );
-      },
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaymentConfirmationScreen(
+          selectedItems: itemsWithOpsi,
+          totalHarga: _totalHarga,
+          paymentMethods: _paymentMethods,
+          initialPaymentMethod: _selectedPaymentMethod,
+          isOnline: _isOnline,
+        ),
+      ),
     );
+
+    if (!mounted) return;
+    if (result != null) {
+      setState(() => _selectedPaymentMethod = result['payment_method']);
+      _savePesanan();
+    }
   }
 
   Future<void> _savePesanan() async {
@@ -908,7 +572,6 @@ class _KasirScreenState extends State<KasirScreen>
           _totalItem = 0;
           _selectedMejaId = null;
           _catatan = '';
-          _nominalBayarController.clear();
           _catatanController.clear();
         });
       }
@@ -2285,121 +1948,4 @@ class _KasirScreenState extends State<KasirScreen>
     );
   }
 
-  Widget _buildNumericKeypad(StateSetter setDialogState) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFf4f7fb), Color(0xFFe8eef5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: _primaryColor.withValues(alpha: 0.12), width: 1.5),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(children: [
-            Expanded(child: _buildKeypadButton('1', setDialogState)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKeypadButton('2', setDialogState)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKeypadButton('3', setDialogState)),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _buildKeypadButton('4', setDialogState)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKeypadButton('5', setDialogState)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKeypadButton('6', setDialogState)),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _buildKeypadButton('7', setDialogState)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKeypadButton('8', setDialogState)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKeypadButton('9', setDialogState)),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: _buildKeypadActionButton('Clear', Icons.clear_all,
-                  Colors.orange.shade700, () => _clearNominal(setDialogState)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(flex: 2, child: _buildKeypadButton('0', setDialogState)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildKeypadActionButton('Del', Icons.backspace,
-                  _primaryColor, () => _removeDigitFromNominal(setDialogState)),
-            ),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildKeypadButton(String digit, StateSetter setDialogState) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      elevation: 2,
-      child: InkWell(
-        onTap: () => _addDigitToNominal(digit, setDialogState),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          height: 60,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: _primaryColor.withValues(alpha: 0.12), width: 1),
-          ),
-          child: Center(
-            child: Text(digit,
-                style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: _primaryColor,
-                    letterSpacing: 1)),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildKeypadActionButton(
-      String label, IconData icon, Color color, VoidCallback onPressed) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(12),
-      elevation: 2,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          height: 60,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 0.5)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

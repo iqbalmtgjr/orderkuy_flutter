@@ -38,8 +38,9 @@ class ShiftService {
           )
           .timeout(const Duration(seconds: 15));
       final data = jsonDecode(res.body);
-      if (res.statusCode == 200 || res.statusCode == 201)
+      if (res.statusCode == 200 || res.statusCode == 201) {
         return {'success': true, ...data};
+      }
       return {
         'success': false,
         'message': data['message'] ?? 'Gagal membuka shift'
@@ -105,8 +106,9 @@ class ShiftService {
           )
           .timeout(const Duration(seconds: 15));
       final data = jsonDecode(res.body);
-      if (res.statusCode == 200 || res.statusCode == 201)
+      if (res.statusCode == 200 || res.statusCode == 201) {
         return {'success': true, ...data};
+      }
       return {'success': false, 'message': data['message'] ?? 'Gagal'};
     } on TimeoutException {
       return {'success': false, 'message': 'Koneksi timeout. Coba lagi.'};

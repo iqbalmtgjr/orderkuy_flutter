@@ -2,24 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/refund_service.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RefundDialog
-//
-// Cara pakai:
-//   final result = await showDialog<RefundModel>(
-//     context: context,
-//     builder: (_) => RefundDialog(
-//       orderId: order.id,
-//       kasirId: kasirId,
-//       totalOrder: 75000,
-//       nomorOrder: order.nomor ?? '#001',
-//     ),
-//   );
-//   if (result != null) {
-//     // refund berhasil dibuat, refresh UI
-//   }
-// ─────────────────────────────────────────────────────────────────────────────
-
 class RefundDialog extends StatefulWidget {
   final int orderId;
   final double totalOrder;
@@ -210,7 +192,7 @@ class _RefundDialogState extends State<RefundDialog> {
               const SizedBox(height: 12),
 
               DropdownButtonFormField<String>(
-                value: _metodeRefund,
+                initialValue: _metodeRefund,
                 decoration: InputDecoration(
                   labelText: 'Metode Refund',
                   prefixIcon: const Icon(Icons.swap_horiz_rounded),

@@ -13,6 +13,7 @@ class History {
   final int status;
   final String statusText;
   final String? kasir;
+  final String? catatan;
   final List<OrderItem> items;
 
   History({
@@ -30,6 +31,7 @@ class History {
     required this.status,
     required this.statusText,
     this.kasir,
+    this.catatan,
     required this.items,
   });
 
@@ -49,6 +51,7 @@ class History {
       status: json['status'] ?? 3,
       statusText: json['status_text'] ?? '',
       kasir: json['kasir'],
+      catatan: json['catatan']?.toString(),
       items: (json['items'] as List<dynamic>?)
               ?.map((item) => OrderItem.fromJson(item))
               .toList() ??
@@ -89,12 +92,14 @@ class OrderItem {
   final int qty;
   final double harga;
   final double subtotal;
+  final String? opsi;
 
   OrderItem({
     required this.menuNama,
     required this.qty,
     required this.harga,
     required this.subtotal,
+    this.opsi,
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
@@ -103,6 +108,7 @@ class OrderItem {
       qty: json['qty'] ?? 0,
       harga: _parseDouble(json['harga']),
       subtotal: _parseDouble(json['subtotal']),
+      opsi: json['opsi']?.toString(),
     );
   }
 
