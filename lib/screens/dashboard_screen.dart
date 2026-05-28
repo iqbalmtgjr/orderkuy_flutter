@@ -156,7 +156,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           _tokoNama = user['toko_nama'] ?? 'Kasvo';
           _tokoId = user['toko_id'] ?? 0;
           _userId = user['id'] ?? 0;
-          _shiftMode = user['shift_mode'] ?? true;
+          final sm = user['shift_mode'];
+          _shiftMode = sm == true || sm == 1;
         });
         _animationController?.forward();
         _cekShiftAktif();
@@ -174,7 +175,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString('user');
       final bool shiftModeLocal = userJson != null
-          ? (jsonDecode(userJson)['shift_mode'] ?? true) as bool
+          ? () {
+              final sm = jsonDecode(userJson)['shift_mode'];
+              return sm == true || sm == 1;
+            }()
           : true;
 
       final response = await ApiService.getDashboardStats();
@@ -1076,9 +1080,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    _saldoVisible
-                        ? _formatRupiah(saldoValue)
-                        : 'Rp ••••••••',
+                    _saldoVisible ? _formatRupiah(saldoValue) : 'Rp ••••••••',
                     style: TextStyle(
                       color: const Color(0xFF111111),
                       fontSize: r.fontXl,
