@@ -113,6 +113,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _userId = 0;
   Map<String, dynamic>? _shiftAktif;
   bool _shiftLoading = false;
+  bool _shiftMode = true; // default true = fitur shift aktif
 
   double _uangDiOutlet = 0;
   double _pengeluaran = 0;
@@ -155,6 +156,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           _tokoNama = user['toko_nama'] ?? 'Kasvo';
           _tokoId = user['toko_id'] ?? 0;
           _userId = user['id'] ?? 0;
+          _shiftMode = user['shift_mode'] ?? true;
         });
         _animationController?.forward();
         _cekShiftAktif();
@@ -188,6 +190,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   // ── Cek shift aktif — dengan offline cache ──────────────────
   Future<void> _cekShiftAktif() async {
+    if (!_shiftMode) return; // shift dinonaktifkan untuk toko ini
     if (_tokoId == 0 || _userId == 0) return;
     setState(() => _shiftLoading = true);
 
@@ -394,7 +397,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _buildHeaderWithCard(r)),
-        if (!_shiftLoading && _shiftAktif == null)
+        if (_shiftMode && !_shiftLoading && _shiftAktif == null)
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
@@ -402,7 +405,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               child: _buildShiftBanner(r),
             ),
           ),
-        if (_shiftAktif != null)
+        if (_shiftMode && _shiftAktif != null)
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
@@ -526,12 +529,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(height: r.sh * 0.04),
-                  if (!_shiftLoading && _shiftAktif == null)
+                  if (_shiftMode && !_shiftLoading && _shiftAktif == null)
                     Padding(
                       padding: EdgeInsets.only(bottom: r.sectionGap),
                       child: _buildShiftBanner(r),
                     ),
-                  if (_shiftAktif != null)
+                  if (_shiftMode && _shiftAktif != null)
                     Padding(
                       padding: EdgeInsets.only(bottom: r.sectionGap),
                       child: _buildShiftAktifInfo(r),
@@ -1158,13 +1161,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   List<_MenuData> _getMenuData() {
     return [
-      _MenuData(
-        icon: Icons.access_time_rounded,
-        label: 'Shift',
-        color: const Color(0xFF00796B),
-        bgColor: const Color(0xFFE0F2F1),
-        onTap: _bukaShiftScreen,
-      ),
+      if (_shiftMode)
+        _MenuData(
+          icon: Icons.access_time_rounded,
+          label: 'Shift',
+          color: const Color(0xFF00796B),
+          bgColor: const Color(0xFFE0F2F1),
+          onTap: _bukaShiftScreen,
+        ),
       _MenuData(
         icon: Icons.point_of_sale_rounded,
         label: 'Kasir',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,8 @@ import 'api_service.dart';
 
 class SyncService {
   static bool _isSyncing = false;
+  static bool _isSyncingPengeluaran = false;
+  static StreamSubscription<List<ConnectivityResult>>? _autoSyncSub;
 
   // ═══════════════════════════════════════════════════════════
   // SYNC OFFLINE ORDERS TO SERVER (existing - no changes)
@@ -24,7 +27,9 @@ class SyncService {
 
     try {
       final conn = await Connectivity().checkConnectivity();
-      if (conn == ConnectivityResult.none) {
+      final isConnected =
+          conn.isNotEmpty && conn.any((r) => r != ConnectivityResult.none);
+      if (!isConnected) {
         debugPrint('📵 Offline: Cannot sync orders');
         _isSyncing = false;
         return {
@@ -62,9 +67,10 @@ class SyncService {
 
           final res = await ApiService.createOrder(payload);
 
-          if (res['success']) {
+          if (res['success'] == true && res['offline'] != true) {
             final serverId = res['data']?['id'];
-            await DBHelper.markSynced(row['id'] as int, serverId ?? 0);
+            await DBHelper.markSynced(
+                row['id'] as int, serverId is int ? serverId : 0);
             successCount++;
             debugPrint('✅ Order $clientUuid synced successfully');
           } else {
@@ -113,10 +119,18 @@ class SyncService {
   // ═══════════════════════════════════════════════════════════
 
   static Future<Map<String, dynamic>> syncPengeluaran() async {
+    if (_isSyncingPengeluaran) {
+      debugPrint('⏳ Sync pengeluaran already in progress, skipping');
+      return {'success': false, 'message': 'Sync pengeluaran sedang berjalan'};
+    }
+    _isSyncingPengeluaran = true;
     try {
       final conn = await Connectivity().checkConnectivity();
-      if (conn == ConnectivityResult.none) {
+      final isConnected = conn.isNotEmpty &&
+          conn.any((r) => r != ConnectivityResult.none);
+      if (!isConnected) {
         debugPrint('📵 Offline: Cannot sync pengeluaran');
+        _isSyncingPengeluaran = false;
         return {
           'success': false,
           'message': 'Tidak ada koneksi internet',
@@ -152,10 +166,10 @@ class SyncService {
 
           final res = await ApiService.createPengeluaran(payload);
 
-          if (res['success']) {
+          if (res['success'] == true && res['offline'] != true) {
             final serverId = res['data']?['id'];
             await DBHelper.markPengeluaranSynced(
-                row['id'] as int, serverId ?? 0);
+                row['id'] as int, serverId is int ? serverId : 0);
             successCount++;
             debugPrint('✅ Pengeluaran $clientUuid synced successfully');
           } else {
@@ -180,6 +194,7 @@ class SyncService {
         await DBHelper.clearSyncedPengeluaran();
       }
 
+      _isSyncingPengeluaran = false;
       return {
         'success': failedCount == 0,
         'message': 'Pengeluaran: $successCount berhasil, $failedCount gagal',
@@ -188,6 +203,7 @@ class SyncService {
         'errors': errors,
       };
     } catch (e) {
+      _isSyncingPengeluaran = false;
       debugPrint('❌ Sync pengeluaran error: $e');
       return {
         'success': false,
@@ -203,7 +219,9 @@ class SyncService {
   static Future<Map<String, dynamic>> syncProducts() async {
     try {
       final conn = await Connectivity().checkConnectivity();
-      if (conn == ConnectivityResult.none) {
+      final isConnectedProducts =
+          conn.isNotEmpty && conn.any((r) => r != ConnectivityResult.none);
+      if (!isConnectedProducts) {
         debugPrint('📵 Offline: Skipping product sync');
 
         final hasCache = await DBHelper.hasProductsCache();
@@ -253,11 +271,15 @@ class SyncService {
   // ═══════════════════════════════════════════════════════════
 
   static void startAutoSync() {
-    Connectivity().onConnectivityChanged.listen((result) {
-      if (result != ConnectivityResult.none) {
+    _autoSyncSub?.cancel();
+    _autoSyncSub =
+        Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      final isConnected =
+          results.isNotEmpty && results.any((r) => r != ConnectivityResult.none);
+      if (isConnected) {
         debugPrint('📡 Connection restored, auto-syncing...');
         syncOrders();
-        syncPengeluaran(); // ← NEW: Also sync pengeluaran
+        syncPengeluaran();
         syncProducts();
       }
     });
@@ -273,8 +295,9 @@ class SyncService {
     final hasProductCache = await DBHelper.hasProductsCache();
     final hasPengeluaranCache = await DBHelper.hasPengeluaranCache();
     final cacheTimestamp = await DBHelper.getProductsCacheTimestamp();
+    final conn = await Connectivity().checkConnectivity();
     final isOnline =
-        await Connectivity().checkConnectivity() != ConnectivityResult.none;
+        conn.isNotEmpty && conn.any((r) => r != ConnectivityResult.none);
 
     return {
       'is_online': isOnline,

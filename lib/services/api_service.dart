@@ -83,7 +83,9 @@ class ApiService {
   static Future<bool> _isOnline() async {
     try {
       final conn = await Connectivity().checkConnectivity();
-      if (conn == ConnectivityResult.none) return false;
+      if (conn.isEmpty || conn.every((r) => r == ConnectivityResult.none)) {
+        return false;
+      }
 
       // Android: double-check dengan actual DNS lookup
       final result = await InternetAddress.lookup(
@@ -726,6 +728,12 @@ class ApiService {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode(orderData),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debugPrint('⏱️ createOrder timeout (15s), saving offline');
+          throw TimeoutException('createOrder timeout');
+        },
       );
 
       if (response.body.trim().startsWith('<!DOCTYPE') ||
@@ -755,9 +763,21 @@ class ApiService {
           'offline': true,
         };
       }
+    } on TimeoutException {
+      debugPrint('⏱️ createOrder timed out, saving offline');
+      final clientUuid =
+          orderData['client_uuid'] as String? ?? const Uuid().v4();
+      orderData['client_uuid'] = clientUuid;
+      await DBHelper.saveOfflineOrder(orderData, clientUuid);
+      return {
+        'success': false,
+        'message': 'Koneksi timeout. Pesanan disimpan offline.',
+        'offline': true,
+      };
     } catch (e) {
       debugPrint('❌ Error creating order: $e');
-      final clientUuid = orderData['client_uuid'] ?? const Uuid().v4();
+      final clientUuid =
+          orderData['client_uuid'] as String? ?? const Uuid().v4();
       orderData['client_uuid'] = clientUuid;
       try {
         await DBHelper.saveOfflineOrder(orderData, clientUuid);

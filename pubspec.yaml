@@ -53,6 +53,10 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
+  windows:
+    generate: true
+    image_path: "assets/icon/kasvo.png"
+    icon_size: 48
   image_path: "assets/icon/kasvo.png"
 
   adaptive_icon_background: "#1565C0"

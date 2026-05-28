@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -74,7 +75,7 @@ class _KasirScreenState extends State<KasirScreen>
   final List<Map<String, dynamic>> _selectedItems = [];
   bool _isLoading = true;
   bool _isOnline = true;
-  final bool _isBackgroundLoading = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   int _jenisOrder = Constants.jenisOrderDineIn;
 
@@ -234,6 +235,7 @@ class _KasirScreenState extends State<KasirScreen>
 
   @override
   void dispose() {
+    _connectivitySub?.cancel();
     _panelController?.dispose();
     _nominalBayarController.dispose();
     _searchController.dispose();
@@ -288,14 +290,21 @@ class _KasirScreenState extends State<KasirScreen>
   }
 
   Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
-    setState(() => _isOnline = result != ConnectivityResult.none);
+    final results = await Connectivity().checkConnectivity();
+    if (!mounted) return;
+    setState(() => _isOnline =
+        results.isNotEmpty && results.any((r) => r != ConnectivityResult.none));
   }
 
   void _listenToConnectivity() {
-    Connectivity().onConnectivityChanged.listen((result) {
-      setState(() => _isOnline = result != ConnectivityResult.none);
-      if (_isOnline && mounted) {
+    _connectivitySub?.cancel();
+    _connectivitySub =
+        Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      if (!mounted) return;
+      final isConnected =
+          results.isNotEmpty && results.any((r) => r != ConnectivityResult.none);
+      setState(() => _isOnline = isConnected);
+      if (isConnected) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('📡 Koneksi kembali, data akan tersinkron'),
@@ -344,9 +353,9 @@ class _KasirScreenState extends State<KasirScreen>
   Future<void> _forceRefreshData() async {
     if (!_isOnline) return;
     setState(() => _isLoading = true);
-    await DBHelper.clearAllCache();
+    await DBHelper.clearProductCache();
     await _loadData();
-    await _loadPaymentMethods(); // ← refresh payment methods juga
+    await _loadPaymentMethods();
   }
 
   void _applyFilters() {
@@ -1206,6 +1215,7 @@ class _KasirScreenState extends State<KasirScreen>
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () async {
               if (_selectedItems.isNotEmpty) {
+                final navigator = Navigator.of(context);
                 final shouldPop = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
@@ -1227,7 +1237,9 @@ class _KasirScreenState extends State<KasirScreen>
                     ],
                   ),
                 );
-                if (shouldPop == true && mounted) Navigator.pop(context);
+                if (shouldPop == true && mounted) {
+                  navigator.pop();
+                }
               } else {
                 Navigator.pop(context);
               }

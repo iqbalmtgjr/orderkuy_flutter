@@ -255,16 +255,12 @@ class DBHelper {
     }
   }
 
-  // Alias untuk backward compat dengan kode lama
-  static Future<void> _ensureKategoriIdColumn() =>
-      _ensureProductsCacheColumns();
-
   // ─────────────────────────────────────────────────────────────
-  // PRODUCTS CACHE  ← PERBAIKAN UTAMA
+  // PRODUCTS CACHE
   // ─────────────────────────────────────────────────────────────
 
-  /// Simpan produk ke cache, TERMASUK option_groups sebagai JSON string.
-  /// [products] adalah raw JSON dari API (Map<String, dynamic>).
+  /// Simpan produk ke cache, termasuk option_groups sebagai JSON string.
+  /// Parameter `products` adalah raw JSON dari API.
   static Future<void> saveProductsToCache(
     List<Map<String, dynamic>> products,
   ) async {
@@ -617,6 +613,17 @@ class DBHelper {
     await database.delete('pengeluaran_cache');
     await database.delete('kategoris_cache');
     debugPrint('🧹 All cache cleared');
+  }
+
+  /// Hapus hanya cache produk/kategori/pengeluaran.
+  /// TIDAK menghapus orders_offline dan pengeluaran_offline agar pesanan
+  /// yang belum tersinkron tidak hilang.
+  static Future<void> clearProductCache() async {
+    final database = await db;
+    await database.delete('products_cache');
+    await database.delete('pengeluaran_cache');
+    await database.delete('kategoris_cache');
+    debugPrint('🧹 Product cache cleared (offline queues preserved)');
   }
 
   static Future<void> resetDatabase() async {
