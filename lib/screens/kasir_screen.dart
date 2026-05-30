@@ -60,6 +60,7 @@ class _KasirScreenState extends State<KasirScreen>
   // ────────────────────────────────────────────────────────────────────
 
   int? _selectedMejaId;
+  String _mejaNoInput = ''; // dipakai saat offline & cache meja kosong
   String _catatan = '';
 
   int? _selectedKategoriFilter;
@@ -414,11 +415,15 @@ class _KasirScreenState extends State<KasirScreen>
       );
       return;
     }
-    if (_jenisOrder == Constants.jenisOrderDineIn && _selectedMejaId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih meja terlebih dahulu')),
-      );
-      return;
+    if (_jenisOrder == Constants.jenisOrderDineIn) {
+      final belumPilihMeja = _selectedMejaId == null ||
+          (_selectedMejaId == 0 && _mejaNoInput.isEmpty);
+      if (belumPilihMeja) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pilih atau ketik nomor meja terlebih dahulu')),
+        );
+        return;
+      }
     }
 
     // Attach resolved option labels so the confirmation screen can display them
@@ -428,8 +433,7 @@ class _KasirScreenState extends State<KasirScreen>
           (item['option_item_ids'] as List?)?.cast<int>() ?? [];
       if (optionItemIds.isEmpty) return item;
       try {
-        final product =
-            _products.firstWhere((p) => p.id == item['menu_id']);
+        final product = _products.firstWhere((p) => p.id == item['menu_id']);
         final names = <String>[];
         for (final group in product.optionGroups) {
           for (final opt in group.items) {
@@ -483,8 +487,11 @@ class _KasirScreenState extends State<KasirScreen>
       'jenis_order': _jenisOrder,
       'metode_bayar': _isCash ? 1 : 2, // backward compat field lama
       'metode_bayar_id': _selectedPaymentMethod?['id'], // field baru (nullable)
-      'meja_id':
-          _jenisOrder == Constants.jenisOrderDineIn ? _selectedMejaId : null,
+      'meja_id': _jenisOrder == Constants.jenisOrderDineIn
+          ? (_selectedMejaId == 0 ? null : _selectedMejaId)
+          : null,
+      if (_jenisOrder == Constants.jenisOrderDineIn && _selectedMejaId == 0 && _mejaNoInput.isNotEmpty)
+        'meja_no': _mejaNoInput,
       'catatan': _catatan,
       'items': _selectedItems
           .map((item) => {
@@ -1778,6 +1785,57 @@ class _KasirScreenState extends State<KasirScreen>
   }
 
   Widget _buildTableSelector() {
+    // Offline dan cache kosong → input manual
+    if (!_isOnline && _mejas.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Nomor Meja',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              border: Border.all(color: Colors.orange.shade200),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.wifi_off, size: 13, color: Colors.orange.shade700),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Offline: ketik nomor meja secara manual',
+                    style: TextStyle(
+                        fontSize: 11.5, color: Colors.orange.shade700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            decoration: InputDecoration(
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              hintText: 'Contoh: 1, 2, VIP',
+              labelText: 'Nomor Meja',
+            ),
+            onChanged: (value) {
+              setState(() {
+                _mejaNoInput = value.trim();
+                _selectedMejaId = _mejaNoInput.isNotEmpty ? 0 : null;
+              });
+            },
+          ),
+        ],
+      );
+    }
+
+    // Online atau cache tersedia → dropdown normal
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1947,5 +2005,4 @@ class _KasirScreenState extends State<KasirScreen>
       ],
     );
   }
-
 }

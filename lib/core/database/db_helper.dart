@@ -12,7 +12,7 @@ class DBHelper {
     _db = await openDatabase(
       join(await getDatabasesPath(), 'orderkuy.db'),
       // ← naikan ke 7 agar onUpgrade dijalankan di device existing
-      version: 7,
+      version: 9,
       onCreate: (db, v) async {
         await _createTables(db);
       },
@@ -88,6 +88,45 @@ class DBHelper {
             await db.execute(
                 'ALTER TABLE products_cache ADD COLUMN kategori_id INTEGER');
           } catch (_) {}
+        }
+
+        if (oldVersion < 9) {
+          await db.execute('''
+          CREATE TABLE IF NOT EXISTS shift_cache(
+            toko_id INTEGER,
+            user_id INTEGER,
+            shift_aktif INTEGER DEFAULT 0,
+            data TEXT,
+            last_updated TEXT,
+            PRIMARY KEY (toko_id, user_id)
+          )
+          ''');
+          await db.execute('''
+          CREATE TABLE IF NOT EXISTS riwayat_cache(
+            key TEXT PRIMARY KEY,
+            data TEXT,
+            last_updated TEXT
+          )
+          ''');
+        }
+
+        if (oldVersion < 8) {
+          await db.execute('''
+          CREATE TABLE IF NOT EXISTS mejas_cache(
+            id INTEGER PRIMARY KEY,
+            no_meja TEXT,
+            status INTEGER,
+            toko_id INTEGER,
+            last_updated TEXT
+          )
+          ''');
+          await db.execute('''
+          CREATE TABLE IF NOT EXISTS orders_cache(
+            id INTEGER PRIMARY KEY,
+            data TEXT,
+            last_updated TEXT
+          )
+          ''');
         }
 
         // ← BARU: simpan option_groups sebagai JSON di cache
@@ -178,6 +217,43 @@ class DBHelper {
       nama_kategori TEXT,
       icon TEXT,
       toko_id INTEGER,
+      last_updated TEXT
+    )
+    ''');
+
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS mejas_cache(
+      id INTEGER PRIMARY KEY,
+      no_meja TEXT,
+      status INTEGER,
+      toko_id INTEGER,
+      last_updated TEXT
+    )
+    ''');
+
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS orders_cache(
+      id INTEGER PRIMARY KEY,
+      data TEXT,
+      last_updated TEXT
+    )
+    ''');
+
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS shift_cache(
+      toko_id INTEGER,
+      user_id INTEGER,
+      shift_aktif INTEGER DEFAULT 0,
+      data TEXT,
+      last_updated TEXT,
+      PRIMARY KEY (toko_id, user_id)
+    )
+    ''');
+
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS riwayat_cache(
+      key TEXT PRIMARY KEY,
+      data TEXT,
       last_updated TEXT
     )
     ''');
@@ -602,6 +678,177 @@ class DBHelper {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // MEJAS CACHE
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<void> saveMejasToCache(
+      List<Map<String, dynamic>> mejas) async {
+    try {
+      final database = await db;
+      final batch = database.batch();
+      batch.delete('mejas_cache');
+      for (final m in mejas) {
+        batch.insert('mejas_cache', {
+          'id': m['id'],
+          'no_meja': m['no_meja']?.toString() ?? '',
+          'status': m['status'] is int
+              ? m['status']
+              : int.tryParse(m['status']?.toString() ?? '0') ?? 0,
+          'toko_id': m['toko_id'] ?? 0,
+          'last_updated': DateTime.now().toIso8601String(),
+        });
+      }
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('❌ saveMejasToCache: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getMejasFromCache() async {
+    try {
+      final database = await db;
+      return database.query('mejas_cache', orderBy: 'id ASC');
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<bool> hasMejasCache() async {
+    try {
+      final database = await db;
+      final result =
+          await database.rawQuery('SELECT COUNT(*) as count FROM mejas_cache');
+      return (result.first['count'] as int) > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ORDERS CACHE (server orders)
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<void> saveOrdersToCache(
+      List<Map<String, dynamic>> orders) async {
+    try {
+      final database = await db;
+      final batch = database.batch();
+      batch.delete('orders_cache');
+      for (final o in orders) {
+        batch.insert('orders_cache', {
+          'id': o['id'],
+          'data': jsonEncode(o),
+          'last_updated': DateTime.now().toIso8601String(),
+        });
+      }
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('❌ saveOrdersToCache: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getOrdersFromCache() async {
+    try {
+      final database = await db;
+      final rows =
+          await database.query('orders_cache', orderBy: 'id DESC');
+      return rows
+          .map((r) => jsonDecode(r['data'] as String) as Map<String, dynamic>)
+          .toList();
+    } catch (e) {
+      debugPrint('❌ getOrdersFromCache: $e');
+      return [];
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // SHIFT CACHE
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<void> saveShiftCache(
+      int tokoId, int userId, bool shiftAktif, Map<String, dynamic>? shift) async {
+    try {
+      final database = await db;
+      await database.insert(
+        'shift_cache',
+        {
+          'toko_id': tokoId,
+          'user_id': userId,
+          'shift_aktif': shiftAktif ? 1 : 0,
+          'data': shift != null ? jsonEncode(shift) : null,
+          'last_updated': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('❌ saveShiftCache: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getShiftCache(
+      int tokoId, int userId) async {
+    try {
+      final database = await db;
+      final rows = await database.query(
+        'shift_cache',
+        where: 'toko_id = ? AND user_id = ?',
+        whereArgs: [tokoId, userId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      final row = rows.first;
+      return {
+        'shift_aktif': row['shift_aktif'] == 1,
+        'shift': row['data'] != null
+            ? jsonDecode(row['data'] as String)
+            : null,
+      };
+    } catch (e) {
+      debugPrint('❌ getShiftCache: $e');
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // RIWAYAT CACHE
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<void> saveRiwayatCache(
+      String key, Map<String, dynamic> data) async {
+    try {
+      final database = await db;
+      await database.insert(
+        'riwayat_cache',
+        {
+          'key': key,
+          'data': jsonEncode(data),
+          'last_updated': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('❌ saveRiwayatCache: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getRiwayatCache(String key) async {
+    try {
+      final database = await db;
+      final rows = await database.query(
+        'riwayat_cache',
+        where: 'key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return jsonDecode(rows.first['data'] as String) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('❌ getRiwayatCache: $e');
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // UTILITIES
   // ─────────────────────────────────────────────────────────────
 
@@ -612,6 +859,10 @@ class DBHelper {
     await database.delete('pengeluaran_offline');
     await database.delete('pengeluaran_cache');
     await database.delete('kategoris_cache');
+    await database.delete('mejas_cache');
+    await database.delete('orders_cache');
+    await database.delete('shift_cache');
+    await database.delete('riwayat_cache');
     debugPrint('🧹 All cache cleared');
   }
 

@@ -99,6 +99,7 @@ class _ShiftScreenState extends State<ShiftScreen>
     with SingleTickerProviderStateMixin {
   bool _loading = true;
   bool _shiftAktif = false;
+  bool _isOffline = false;
   Map<String, dynamic>? _shift;
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
@@ -128,6 +129,7 @@ class _ShiftScreenState extends State<ShiftScreen>
       setState(() {
         _shiftAktif = res['shift_aktif'] == true;
         _shift = res['shift'];
+        _isOffline = res['offline'] == true;
         _loading = false;
       });
       _animCtrl.forward(from: 0);
@@ -142,12 +144,34 @@ class _ShiftScreenState extends State<ShiftScreen>
       backgroundColor: _C.bg,
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(),
-      body: _loading
-          ? _buildLoading()
-          : FadeTransition(
-              opacity: _fadeAnim,
-              child: _shiftAktif ? _buildShiftAktif() : _buildBukaShift(),
+      body: Column(
+        children: [
+          if (_isOffline)
+            Container(
+              width: double.infinity,
+              color: Colors.orange.shade700,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+              child: const Row(
+                children: [
+                  Icon(Icons.wifi_off, color: Colors.white, size: 15),
+                  SizedBox(width: 8),
+                  Text(
+                    'Offline — Buka/Tutup shift memerlukan koneksi internet',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
+          Expanded(
+            child: _loading
+                ? _buildLoading()
+                : FadeTransition(
+                    opacity: _fadeAnim,
+                    child: _shiftAktif ? _buildShiftAktif() : _buildBukaShift(),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -203,10 +227,12 @@ class _ShiftScreenState extends State<ShiftScreen>
   Widget _buildBukaShift() {
     return _BukaShiftForm(
       tokoId: widget.tokoId,
+      isOffline: _isOffline,
       onBerhasil: (user, shift) {
         setState(() {
           _shiftAktif = true;
           _shift = shift;
+          _isOffline = false;
         });
         _animCtrl.forward(from: 0);
         widget.onShiftOpened?.call(user, shift);
@@ -218,6 +244,7 @@ class _ShiftScreenState extends State<ShiftScreen>
     return _ShiftAktifView(
       shift: _shift!,
       tokoId: widget.tokoId,
+      isOffline: _isOffline,
       onTutup: () {
         setState(() {
           _shiftAktif = false;
@@ -336,10 +363,15 @@ class _BottomCurvePainter extends CustomPainter {
 // ─────────────────────────────────────────────────────────────
 class _BukaShiftForm extends StatefulWidget {
   final int tokoId;
+  final bool isOffline;
   final void Function(Map<String, dynamic> user, Map<String, dynamic> shift)
       onBerhasil;
 
-  const _BukaShiftForm({required this.tokoId, required this.onBerhasil});
+  const _BukaShiftForm({
+    required this.tokoId,
+    required this.isOffline,
+    required this.onBerhasil,
+  });
 
   @override
   State<_BukaShiftForm> createState() => _BukaShiftFormState();
@@ -362,6 +394,10 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
   }
 
   Future<void> _buka() async {
+    if (widget.isOffline) {
+      setState(() => _error = 'Tidak dapat membuka shift saat offline. Hubungkan internet terlebih dahulu.');
+      return;
+    }
     if (_pinCtrl.text.isEmpty) {
       setState(() => _error = 'PIN wajib diisi');
       return;
@@ -507,12 +543,14 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
 class _ShiftAktifView extends StatelessWidget {
   final Map<String, dynamic> shift;
   final int tokoId;
+  final bool isOffline;
   final VoidCallback onTutup;
   final VoidCallback onRefresh;
 
   const _ShiftAktifView({
     required this.shift,
     required this.tokoId,
+    required this.isOffline,
     required this.onTutup,
     required this.onRefresh,
   });
@@ -633,7 +671,9 @@ class _ShiftAktifView extends StatelessWidget {
                       desc: 'Setor kas ke laci kasir',
                       color: _C.success,
                       bgColor: _C.successLight,
-                      onTap: () => _showKasDialog(context, 'in'),
+                      onTap: isOffline
+                          ? () => _showOfflineSnack(context)
+                          : () => _showKasDialog(context, 'in'),
                     ),
                     const SizedBox(height: 8),
                     _buildActionTile(
@@ -643,7 +683,9 @@ class _ShiftAktifView extends StatelessWidget {
                       desc: 'Ambil kas dari laci kasir',
                       color: _C.warning,
                       bgColor: _C.warningLight,
-                      onTap: () => _showKasDialog(context, 'out'),
+                      onTap: isOffline
+                          ? () => _showOfflineSnack(context)
+                          : () => _showKasDialog(context, 'out'),
                     ),
                     const SizedBox(height: 8),
                     _buildActionTile(
@@ -653,7 +695,9 @@ class _ShiftAktifView extends StatelessWidget {
                       desc: 'Shift tetap berjalan',
                       color: _C.accent,
                       bgColor: _C.accentLight,
-                      onTap: () => _showGantiKasirDialog(context),
+                      onTap: isOffline
+                          ? () => _showOfflineSnack(context)
+                          : () => _showGantiKasirDialog(context),
                     ),
                     const SizedBox(height: 16),
                     _buildTutupButton(context),
@@ -829,10 +873,20 @@ class _ShiftAktifView extends StatelessWidget {
     );
   }
 
+  void _showOfflineSnack(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Fitur ini tidak tersedia saat offline'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   Widget _buildTutupButton(BuildContext context) {
     final isTablet = _isTablet(context);
     return GestureDetector(
-      onTap: () => _showTutupDialog(context),
+      onTap: isOffline ? () => _showOfflineSnack(context) : () => _showTutupDialog(context),
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(vertical: isTablet ? 16 : 14),

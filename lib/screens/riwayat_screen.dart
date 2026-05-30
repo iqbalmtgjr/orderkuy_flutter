@@ -21,6 +21,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
   RiwayatSummary? _summary;
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _isOffline = false;
   int _currentPage = 1;
   int _lastPage = 1;
 
@@ -169,12 +170,17 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
         setState(() {
           _orders = data.map((json) => History.fromJson(json)).toList();
           _lastPage = meta['last_page'] ?? 1;
+          _isOffline = riwayatRes['offline'] == true;
           _isLoading = false;
         });
       } else {
-        setState(() => _isLoading = false);
-        _showSnackBar(riwayatRes['message'] ?? 'Gagal memuat data',
-            isError: true);
+        setState(() {
+          _isOffline = riwayatRes['offline'] == true;
+          _isLoading = false;
+        });
+        if (riwayatRes['offline'] != true) {
+          _showSnackBar(riwayatRes['message'] ?? 'Gagal memuat data', isError: true);
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -298,7 +304,28 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: Column(
+        children: [
+          if (_isOffline)
+            Container(
+              width: double.infinity,
+              color: Colors.orange.shade700,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+              child: const Row(
+                children: [
+                  Icon(Icons.wifi_off, color: Colors.white, size: 15),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Offline — Menampilkan data terakhir yang tersimpan',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: RefreshIndicator(
         onRefresh: _loadData,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -329,6 +356,9 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                   ),
                 ],
               ),
+          ),
+        ),
+        ],
       ),
     );
   }

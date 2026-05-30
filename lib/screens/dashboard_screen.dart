@@ -205,6 +205,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           }
         }
 
+        // Prefetch di background agar cache terisi sebelum user butuh offline
+        _prefetchOfflineCaches();
+
         setState(() {
           _uangDiOutlet = (data['uang_di_outlet'] ?? 0).toDouble();
           _pengeluaran = pengeluaran;
@@ -219,6 +222,22 @@ class _DashboardScreenState extends State<DashboardScreen>
       debugPrint('Error: $e');
       setState(() => _isLoading = false);
     }
+  }
+
+  void _prefetchOfflineCaches() {
+    Future.microtask(() async {
+      try {
+        final conn = await Connectivity().checkConnectivity();
+        if (conn.isEmpty || conn.every((r) => r == ConnectivityResult.none)) return;
+        await Future.wait([
+          ApiService.getOrders(),
+          ApiService.getAllTables(),
+        ]);
+        debugPrint('✅ Offline cache prefetched (orders + mejas)');
+      } catch (e) {
+        debugPrint('⚠️ Prefetch cache error: $e');
+      }
+    });
   }
 
   // ── Cek shift aktif — dengan offline cache ──────────────────

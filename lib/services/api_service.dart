@@ -13,7 +13,6 @@ import '../models/kategori.dart';
 import '../models/pengeluaran.dart';
 import '../core/database/db_helper.dart';
 import '../core/database/offline_queue_db.dart';
-import 'dart:io';
 
 class ApiService {
   static String get baseUrl => Constants.baseUrl;
@@ -83,20 +82,7 @@ class ApiService {
   static Future<bool> _isOnline() async {
     try {
       final conn = await Connectivity().checkConnectivity();
-      if (conn.isEmpty || conn.every((r) => r == ConnectivityResult.none)) {
-        return false;
-      }
-
-      // Android: double-check dengan actual DNS lookup
-      final result = await InternetAddress.lookup(
-        Uri.parse(baseUrl).host, // lookup host API kamu langsung
-      ).timeout(const Duration(seconds: 5));
-
-      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-    } on SocketException {
-      return false;
-    } on TimeoutException {
-      return false;
+      return conn.isNotEmpty && conn.any((r) => r != ConnectivityResult.none);
     } catch (_) {
       return false;
     }
@@ -550,6 +536,10 @@ class ApiService {
 
   static Future<List<Meja>> getFreeTables() async {
     try {
+      if (!await _isOnline()) {
+        debugPrint('📵 Offline: getFreeTables returning cached mejas');
+        return await _getMejasFromCache();
+      }
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
       final response = await http.get(
@@ -558,22 +548,26 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final mejasList = data['mejas'] as List;
+        final mejasList = (data['mejas'] as List).cast<Map<String, dynamic>>();
+        await DBHelper.saveMejasToCache(mejasList);
         return mejasList.map((meja) => Meja.fromJson(meja)).toList();
-      } else {
-        return [];
       }
+      return await _getMejasFromCache();
     } catch (e) {
       debugPrint('Error getting tables: $e');
-      return [];
+      return await _getMejasFromCache();
     }
   }
 
   static Future<List<Meja>> getAllTables() async {
     try {
+      if (!await _isOnline()) {
+        debugPrint('📵 Offline: getAllTables returning cached mejas');
+        return await _getMejasFromCache();
+      }
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(Constants.tokenKey);
       final response = await http.get(
@@ -582,16 +576,25 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final mejasList = data['mejas'] as List;
+        final mejasList = (data['mejas'] as List).cast<Map<String, dynamic>>();
+        await DBHelper.saveMejasToCache(mejasList);
         return mejasList.map((meja) => Meja.fromJson(meja)).toList();
-      } else {
-        return [];
       }
+      return await _getMejasFromCache();
     } catch (e) {
       debugPrint('Error getting all tables: $e');
+      return await _getMejasFromCache();
+    }
+  }
+
+  static Future<List<Meja>> _getMejasFromCache() async {
+    try {
+      final cached = await DBHelper.getMejasFromCache();
+      return cached.map((m) => Meja.fromJson(m)).toList();
+    } catch (_) {
       return [];
     }
   }
@@ -602,10 +605,9 @@ class ApiService {
 
   static Future<List<Order>> getOrders({String? filterJenisOrder}) async {
     try {
-      // ← TAMBAHKAN: cek offline dulu
       if (!await _isOnline()) {
-        debugPrint('📵 Offline: getOrders returning cached offline orders');
-        return await _getOfflineOrdersAsOrders();
+        debugPrint('📵 Offline: getOrders returning cached + offline orders');
+        return await _getMergedOfflineOrders(filterJenisOrder);
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -621,7 +623,6 @@ class ApiService {
           'Authorization': 'Bearer $token',
         },
       ).timeout(
-        // ← TAMBAHKAN timeout
         const Duration(seconds: 10),
         onTimeout: () {
           debugPrint('⏱️ getOrders timeout');
@@ -631,18 +632,42 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final ordersList = data['orders'] as List;
+        final ordersList = (data['orders'] as List).cast<Map<String, dynamic>>();
+        // Cache tanpa filter agar offline punya data lengkap
+        if (filterJenisOrder == null || filterJenisOrder.isEmpty) {
+          await DBHelper.saveOrdersToCache(ordersList);
+        }
         return ordersList.map((order) => Order.fromJson(order)).toList();
       } else {
         return [];
       }
     } on TimeoutException {
-      debugPrint('⏱️ getOrders timed out, returning offline orders');
-      return await _getOfflineOrdersAsOrders();
+      debugPrint('⏱️ getOrders timed out, returning cached + offline orders');
+      return await _getMergedOfflineOrders(filterJenisOrder);
     } catch (e) {
       debugPrint('Error getting orders: $e');
-      return await _getOfflineOrdersAsOrders();
+      return await _getMergedOfflineOrders(filterJenisOrder);
     }
+  }
+
+  static Future<List<Order>> _getMergedOfflineOrders(
+      String? filterJenisOrder) async {
+    final cached = await DBHelper.getOrdersFromCache();
+    final offlineOrders = await _getOfflineOrdersAsOrders();
+
+    List<Order> serverOrders = cached.map((o) => Order.fromJson(o)).toList();
+
+    // Terapkan filter jika ada
+    if (filterJenisOrder != null && filterJenisOrder.isNotEmpty) {
+      final filter = int.tryParse(filterJenisOrder);
+      if (filter != null) {
+        serverOrders =
+            serverOrders.where((o) => o.jenisOrder == filter).toList();
+      }
+    }
+
+    // Offline orders selalu tampil (belum tersinkron)
+    return [...serverOrders, ...offlineOrders];
   }
 
   static Future<List<Order>> _getOfflineOrdersAsOrders() async {
@@ -1211,6 +1236,20 @@ class ApiService {
     int? metodePembayaran,
     String? search,
   }) async {
+    final isNoFilter = page == 1 &&
+        tanggalDari == null &&
+        tanggalSampai == null &&
+        jenisOrder == null &&
+        metodePembayaran == null &&
+        (search == null || search.isEmpty);
+
+    if (!await _isOnline()) {
+      debugPrint('📵 Offline: getRiwayat returning cached data');
+      final cached = await DBHelper.getRiwayatCache('riwayat_data');
+      if (cached != null) return {...cached, 'offline': true};
+      return {'success': false, 'message': 'Tidak ada data cache riwayat.', 'offline': true};
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
@@ -1218,12 +1257,8 @@ class ApiService {
       Map<String, String> queryParams = {'page': page.toString()};
       if (tanggalDari != null) queryParams['tanggal_dari'] = tanggalDari;
       if (tanggalSampai != null) queryParams['tanggal_sampai'] = tanggalSampai;
-      if (jenisOrder != null) {
-        queryParams['jenis_order'] = jenisOrder.toString();
-      }
-      if (metodePembayaran != null) {
-        queryParams['metode_pembayaran'] = metodePembayaran.toString();
-      }
+      if (jenisOrder != null) queryParams['jenis_order'] = jenisOrder.toString();
+      if (metodePembayaran != null) queryParams['metode_pembayaran'] = metodePembayaran.toString();
       if (search != null && search.isNotEmpty) queryParams['search'] = search;
       final uri =
           Uri.parse('$baseUrl/riwayat').replace(queryParameters: queryParams);
@@ -1233,14 +1268,22 @@ class ApiService {
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (isNoFilter) {
+          await DBHelper.saveRiwayatCache('riwayat_data', data);
+        }
+        return data;
       } else if (response.statusCode == 401) {
         throw Exception('Sesi berakhir, silakan login ulang');
       } else {
         throw Exception('Gagal memuat riwayat');
       }
+    } on TimeoutException {
+      final cached = await DBHelper.getRiwayatCache('riwayat_data');
+      if (cached != null) return {...cached, 'offline': true};
+      rethrow;
     } catch (e) {
       rethrow;
     }
@@ -1250,6 +1293,15 @@ class ApiService {
     String? tanggalDari,
     String? tanggalSampai,
   }) async {
+    final isNoFilter = tanggalDari == null && tanggalSampai == null;
+
+    if (!await _isOnline()) {
+      debugPrint('📵 Offline: getRiwayatSummary returning cached data');
+      final cached = await DBHelper.getRiwayatCache('riwayat_summary');
+      if (cached != null) return {...cached, 'offline': true};
+      return {'success': false, 'offline': true};
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
@@ -1265,9 +1317,13 @@ class ApiService {
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (isNoFilter) {
+          await DBHelper.saveRiwayatCache('riwayat_summary', data);
+        }
+        return data;
       } else if (response.statusCode == 401) {
         throw Exception('Sesi berakhir, silakan login ulang');
       } else if (response.statusCode == 404) {
@@ -1275,6 +1331,10 @@ class ApiService {
       } else {
         throw Exception('Gagal memuat summary: ${response.statusCode}');
       }
+    } on TimeoutException {
+      final cached = await DBHelper.getRiwayatCache('riwayat_summary');
+      if (cached != null) return {...cached, 'offline': true};
+      rethrow;
     } catch (e) {
       rethrow;
     }

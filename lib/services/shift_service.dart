@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../utils/constants.dart';
+import '../core/database/db_helper.dart';
 
 class ShiftService {
   static String get baseUrl => Constants.baseUrl;
@@ -24,6 +26,7 @@ class ShiftService {
     required int openAmount,
     String? catatanBuka,
   }) async {
+    if (!await _isOnline()) return _offlineError();
     try {
       final res = await http
           .post(
@@ -59,6 +62,7 @@ class ShiftService {
     required int closeAmount,
     String? catatanTutup,
   }) async {
+    if (!await _isOnline()) return _offlineError();
     try {
       final res = await http
           .post(
@@ -92,6 +96,7 @@ class ShiftService {
     required int jumlah,
     String? keterangan,
   }) async {
+    if (!await _isOnline()) return _offlineError();
     try {
       final res = await http
           .post(
@@ -122,6 +127,7 @@ class ShiftService {
     required int tokoId,
     required String pin,
   }) async {
+    if (!await _isOnline()) return _offlineError();
     try {
       final res = await http
           .post(
@@ -144,10 +150,37 @@ class ShiftService {
     }
   }
 
+  static Future<bool> _isOnline() async {
+    try {
+      final conn = await Connectivity().checkConnectivity();
+      return conn.isNotEmpty && conn.any((r) => r != ConnectivityResult.none);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<Map<String, dynamic>> _fromShiftCache(
+      int tokoId, int userId) async {
+    final cache = await DBHelper.getShiftCache(tokoId, userId);
+    if (cache != null) {
+      return {
+        'success': true,
+        'shift_aktif': cache['shift_aktif'],
+        'shift': cache['shift'],
+        'offline': true,
+      };
+    }
+    return {'success': false, 'shift_aktif': false, 'shift': null, 'offline': true};
+  }
+
   static Future<Map<String, dynamic>> cekShiftAktif({
     required int tokoId,
     required int userId,
   }) async {
+    if (!await _isOnline()) {
+      debugPrint('📵 Offline: cekShiftAktif returning cached shift');
+      return _fromShiftCache(tokoId, userId);
+    }
     try {
       final res = await http
           .get(
@@ -156,16 +189,23 @@ class ShiftService {
           )
           .timeout(const Duration(seconds: 10));
       final data = jsonDecode(res.body);
-      if (res.statusCode == 200) return {'success': true, ...data};
+      if (res.statusCode == 200) {
+        await DBHelper.saveShiftCache(
+          tokoId, userId, data['shift_aktif'] == true, data['shift']);
+        return {'success': true, ...data};
+      }
       return {'success': false, 'shift_aktif': false, 'shift': null};
     } on TimeoutException {
-      debugPrint('⏱️ cekShiftAktif timeout');
-      return {'success': false, 'shift_aktif': false, 'shift': null};
+      debugPrint('⏱️ cekShiftAktif timeout, returning cache');
+      return _fromShiftCache(tokoId, userId);
     } catch (e) {
       debugPrint('❌ cekShiftAktif error: $e');
-      return {'success': false, 'shift_aktif': false, 'shift': null};
+      return _fromShiftCache(tokoId, userId);
     }
   }
+
+  static Map<String, dynamic> _offlineError() =>
+      {'success': false, 'message': 'Tidak dapat digunakan saat offline. Hubungkan internet terlebih dahulu.'};
 
   static Future<Map<String, dynamic>> getRiwayatShift({
     required int tokoId,
