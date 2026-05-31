@@ -370,6 +370,8 @@ class _KasirScreenState extends State<KasirScreen>
       context,
       product: product,
       initialQty: item['qty'] as int,
+      initialOptionItemIds:
+          (item['option_item_ids'] as List?)?.cast<int>() ?? [],
     );
     if (result == null || !mounted) return;
 
@@ -420,7 +422,8 @@ class _KasirScreenState extends State<KasirScreen>
           (_selectedMejaId == 0 && _mejaNoInput.isEmpty);
       if (belumPilihMeja) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pilih atau ketik nomor meja terlebih dahulu')),
+          const SnackBar(
+              content: Text('Pilih atau ketik nomor meja terlebih dahulu')),
         );
         return;
       }
@@ -490,7 +493,9 @@ class _KasirScreenState extends State<KasirScreen>
       'meja_id': _jenisOrder == Constants.jenisOrderDineIn
           ? (_selectedMejaId == 0 ? null : _selectedMejaId)
           : null,
-      if (_jenisOrder == Constants.jenisOrderDineIn && _selectedMejaId == 0 && _mejaNoInput.isNotEmpty)
+      if (_jenisOrder == Constants.jenisOrderDineIn &&
+          _selectedMejaId == 0 &&
+          _mejaNoInput.isNotEmpty)
         'meja_no': _mejaNoInput,
       'catatan': _catatan,
       'items': _selectedItems

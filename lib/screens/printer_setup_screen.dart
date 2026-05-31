@@ -23,6 +23,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
   Printer? _pendingKasir;
   Printer? _pendingDapur;
 
+  String _paperSize = '58';
+
   @override
   void initState() {
     super.initState();
@@ -41,12 +43,14 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
         await ThermalPrintService.getSavedPrinter(role: PrinterRole.kasir);
     final dapur =
         await ThermalPrintService.getSavedPrinter(role: PrinterRole.dapur);
+    final paperSize = await ThermalPrintService.getSavedPaperSize();
     if (mounted) {
       setState(() {
         _savedKasir = kasir;
         _savedDapur = dapur;
         _pendingKasir = kasir;
         _pendingDapur = dapur;
+        _paperSize = paperSize;
       });
     }
   }
@@ -193,6 +197,14 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
     }
   }
 
+  Future<void> _changePaperSize(String size) async {
+    await ThermalPrintService.savePaperSize(size);
+    if (mounted) {
+      setState(() => _paperSize = size);
+      _showSnack('Ukuran kertas diubah ke ${size}mm', Colors.green);
+    }
+  }
+
   void _showLoadingDialog(String message) {
     showDialog(
       context: context,
@@ -300,6 +312,39 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
               'Pilih tab printer yang ingin dikonfigurasi, lalu ketuk printer dari daftar.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
               textAlign: TextAlign.center,
+            ),
+          ),
+
+          // ── Paper size selector ─────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 4)
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.straighten,
+                      size: 18, color: Color(0xFF1a315b)),
+                  const SizedBox(width: 10),
+                  const Text('Ukuran Kertas:',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w500)),
+                  const Spacer(),
+                  _paperSizeButton('58mm', '58'),
+                  const SizedBox(width: 6),
+                  _paperSizeButton('80mm', '80'),
+                ],
+              ),
             ),
           ),
 
@@ -493,6 +538,33 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen>
             ),
           ),
       ],
+    );
+  }
+
+  Widget _paperSizeButton(String label, String value) {
+    final isSelected = _paperSize == value;
+    return GestureDetector(
+      onTap: () => _changePaperSize(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1a315b) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF1a315b)
+                : Colors.grey.shade300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+          ),
+        ),
+      ),
     );
   }
 

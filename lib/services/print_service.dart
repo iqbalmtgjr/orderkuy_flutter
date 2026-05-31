@@ -42,6 +42,9 @@ class ThermalPrintService {
   static const _kKasirName = 'printer_kasir_name';
   static const _kDapurAddress = 'printer_dapur_address';
   static const _kDapurName = 'printer_dapur_name';
+  static const _kPaperSize = 'printer_paper_size';
+
+  static String _currentPaperSize = '58';
 
   // Singleton
   static final ThermalPrintService _instance = ThermalPrintService._internal();
@@ -55,8 +58,12 @@ class ThermalPrintService {
   static Future<Generator> _getGenerator() async {
     if (_cachedGenerator != null) return _cachedGenerator!;
     _cachedProfile = await CapabilityProfile.load();
-    _cachedGenerator = Generator(PaperSize.mm58, _cachedProfile!);
-    debugPrint('✅ Generator cached');
+    final prefs = await SharedPreferences.getInstance();
+    _currentPaperSize = prefs.getString(_kPaperSize) ?? '58';
+    final paperSize =
+        _currentPaperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
+    _cachedGenerator = Generator(paperSize, _cachedProfile!);
+    debugPrint('✅ Generator cached (${_currentPaperSize}mm)');
     return _cachedGenerator!;
   }
 
@@ -298,7 +305,7 @@ class ThermalPrintService {
             role == PrinterRole.kasir ? '[PRINTER KASIR]' : '[PRINTER DAPUR]';
 
         List<int> bytes = [];
-        bytes += generator.text('================================',
+        bytes += generator.text(_sep(),
             styles: const PosStyles(align: PosAlign.center));
         bytes += generator.text('TEST PRINT',
             styles: const PosStyles(
@@ -314,7 +321,7 @@ class ThermalPrintService {
                 bold: true));
         bytes += generator.text(label,
             styles: const PosStyles(align: PosAlign.center, bold: true));
-        bytes += generator.text('================================',
+        bytes += generator.text(_sep(),
             styles: const PosStyles(align: PosAlign.center));
         bytes += generator.text('Printer berhasil terhubung',
             styles: const PosStyles(align: PosAlign.center));
@@ -529,15 +536,13 @@ class ThermalPrintService {
     final dateStr =
         '${_pad(now.day)}/${_pad(now.month)}/${now.year} ${_pad(now.hour)}:${_pad(now.minute)}';
 
-    bytes += generator.text('Kasvo',
+    bytes += generator.text(tokoNama,
         styles: const PosStyles(
             align: PosAlign.center,
             height: PosTextSize.size2,
             width: PosTextSize.size2,
             bold: true));
     bytes += generator.emptyLines(1);
-    bytes += generator.text(tokoNama,
-        styles: const PosStyles(align: PosAlign.center, bold: true));
     if (tokoAlamat != null && tokoAlamat.isNotEmpty) {
       bytes += generator.text(tokoAlamat,
           styles: const PosStyles(align: PosAlign.center));
@@ -546,7 +551,7 @@ class ThermalPrintService {
       bytes += generator.text('Telp: $tokoTelepon',
           styles: const PosStyles(align: PosAlign.center));
     }
-    bytes += generator.text('================================',
+    bytes += generator.text(_sep(),
         styles: const PosStyles(align: PosAlign.center));
 
     bytes += generator.row([
@@ -604,7 +609,7 @@ class ThermalPrintService {
       ]);
     }
 
-    bytes += generator.text('--------------------------------',
+    bytes += generator.text(_dashSep(),
         styles: const PosStyles(align: PosAlign.center));
 
     double subtotal = 0;
@@ -643,7 +648,7 @@ class ThermalPrintService {
       ]);
     }
 
-    bytes += generator.text('--------------------------------',
+    bytes += generator.text(_dashSep(),
         styles: const PosStyles(align: PosAlign.center));
     bytes += generator.row([
       PosColumn(
@@ -672,7 +677,7 @@ class ThermalPrintService {
       ]);
     }
 
-    bytes += generator.text('================================',
+    bytes += generator.text(_sep(),
         styles: const PosStyles(align: PosAlign.center));
     bytes += generator.row([
       PosColumn(
@@ -684,7 +689,7 @@ class ThermalPrintService {
           width: 6,
           styles: const PosStyles(align: PosAlign.right, bold: true)),
     ]);
-    bytes += generator.text('================================',
+    bytes += generator.text(_sep(),
         styles: const PosStyles(align: PosAlign.center));
 
     if (catatan != null && catatan.isNotEmpty) {
@@ -729,7 +734,7 @@ class ThermalPrintService {
             bold: true,
             height: PosTextSize.size2,
             width: PosTextSize.size2));
-    bytes += generator.text('================================',
+    bytes += generator.text(_sep(),
         styles: const PosStyles(align: PosAlign.center));
 
     bytes += generator.row([
@@ -795,11 +800,11 @@ class ThermalPrintService {
       ]);
     }
 
-    bytes += generator.text('================================',
+    bytes += generator.text(_sep(),
         styles: const PosStyles(align: PosAlign.center));
     bytes += generator.text('ITEM PESANAN:',
         styles: const PosStyles(align: PosAlign.left, bold: true));
-    bytes += generator.text('--------------------------------',
+    bytes += generator.text(_dashSep(),
         styles: const PosStyles(align: PosAlign.center));
 
     for (var item in items) {
@@ -834,7 +839,7 @@ class ThermalPrintService {
       }
     }
 
-    bytes += generator.text('================================',
+    bytes += generator.text(_sep(),
         styles: const PosStyles(align: PosAlign.center));
 
     if (catatan != null && catatan.isNotEmpty) {
@@ -843,7 +848,7 @@ class ThermalPrintService {
       bytes += generator.text(catatan,
           styles:
               const PosStyles(align: PosAlign.left, height: PosTextSize.size2));
-      bytes += generator.text('================================',
+      bytes += generator.text(_sep(),
           styles: const PosStyles(align: PosAlign.center));
     }
 
@@ -855,6 +860,22 @@ class ThermalPrintService {
   // ═══════════════════════════════════════════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  static String _sep() => '=' * (_currentPaperSize == '80' ? 48 : 32);
+  static String _dashSep() => '-' * (_currentPaperSize == '80' ? 48 : 32);
+
+  static Future<void> savePaperSize(String size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kPaperSize, size);
+    _currentPaperSize = size;
+    _cachedGenerator = null;
+    debugPrint('✅ Paper size saved: ${size}mm');
+  }
+
+  static Future<String> getSavedPaperSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kPaperSize) ?? '58';
+  }
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
 
@@ -1002,7 +1023,7 @@ class ThermalPrintService {
     bytes += generator.text(tokoNama,
         styles: const PosStyles(align: PosAlign.center, bold: true));
 
-    bytes += generator.text('================================',
+    bytes += generator.text(_sep(),
         styles: const PosStyles(align: PosAlign.center));
 
     // Detail Kasir & Waktu
@@ -1040,7 +1061,7 @@ class ThermalPrintService {
           styles: const PosStyles(align: PosAlign.right)),
     ]);
 
-    bytes += generator.text('--------------------------------',
+    bytes += generator.text(_dashSep(),
         styles: const PosStyles(align: PosAlign.center));
 
     // Ringkasan Penjualan
@@ -1070,7 +1091,7 @@ class ThermalPrintService {
           styles: const PosStyles(align: PosAlign.right)),
     ]);
 
-    bytes += generator.text('--------------------------------',
+    bytes += generator.text(_dashSep(),
         styles: const PosStyles(align: PosAlign.center));
 
     // Ringkasan Kas
@@ -1150,7 +1171,7 @@ class ThermalPrintService {
     // Riwayat Cash Flow (Jika ada)
     final cashFlows = shift['cash_flows'] as List<dynamic>? ?? [];
     if (cashFlows.isNotEmpty) {
-      bytes += generator.text('--------------------------------',
+      bytes += generator.text(_dashSep(),
           styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('RIWAYAT KAS (IN/OUT)',
           styles: const PosStyles(align: PosAlign.center, bold: true));

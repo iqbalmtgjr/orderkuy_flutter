@@ -10,11 +10,13 @@ import '../models/product.dart';
 class OptionPickerDialog extends StatefulWidget {
   final Product product;
   final int initialQty;
+  final List<int> initialOptionItemIds;
 
   const OptionPickerDialog({
     super.key,
     required this.product,
     this.initialQty = 1,
+    this.initialOptionItemIds = const [],
   });
 
   /// Tampilkan dialog dan kembalikan hasil pilihan.
@@ -24,6 +26,7 @@ class OptionPickerDialog extends StatefulWidget {
     BuildContext context, {
     required Product product,
     int initialQty = 1,
+    List<int> initialOptionItemIds = const [],
   }) {
     return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -32,6 +35,7 @@ class OptionPickerDialog extends StatefulWidget {
       builder: (context) => OptionPickerDialog(
         product: product,
         initialQty: initialQty,
+        initialOptionItemIds: initialOptionItemIds,
       ),
     );
   }
@@ -63,14 +67,27 @@ class _OptionPickerDialogState extends State<OptionPickerDialog> {
     super.initState();
     _qty = widget.initialQty;
 
+    final preSelected = widget.initialOptionItemIds.toSet();
+
     for (final group in widget.product.optionGroups) {
       if (group.isSingle) {
-        // Pilih item pertama secara default jika required
-        _singleSelections[group.id] = group.isRequired && group.items.isNotEmpty
-            ? group.items.first.id
-            : null;
+        final savedId = group.items
+            .where((i) => preSelected.contains(i.id))
+            .map((i) => i.id)
+            .firstOrNull;
+        if (savedId != null) {
+          _singleSelections[group.id] = savedId;
+        } else {
+          _singleSelections[group.id] =
+              group.isRequired && group.items.isNotEmpty
+                  ? group.items.first.id
+                  : null;
+        }
       } else {
-        _multipleSelections[group.id] = {};
+        _multipleSelections[group.id] = group.items
+            .where((i) => preSelected.contains(i.id))
+            .map((i) => i.id)
+            .toSet();
       }
     }
   }
