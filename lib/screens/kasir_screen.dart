@@ -195,15 +195,7 @@ class _KasirScreenState extends State<KasirScreen>
       });
     } catch (e) {
       debugPrint('❌ _loadPaymentMethods error: $e');
-      setState(() {
-        _paymentMethods = [
-          {'id': null, 'nama': 'Tunai', 'kode': 'CASH'},
-          {'id': null, 'nama': 'Transfer', 'kode': 'TF'},
-          {'id': null, 'nama': 'QRIS', 'kode': 'QRIS'},
-        ];
-        _selectedPaymentMethod = _paymentMethods.first;
-        _paymentMethodsLoading = false;
-      });
+      setState(() => _paymentMethodsLoading = false);
     }
   }
   // ────────────────────────────────────────────────────────────
@@ -469,6 +461,16 @@ class _KasirScreenState extends State<KasirScreen>
   }
 
   Future<void> _savePesanan() async {
+    if (_selectedPaymentMethod?['id'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Metode pembayaran belum tersedia. Coba refresh atau periksa koneksi.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -485,11 +487,10 @@ class _KasirScreenState extends State<KasirScreen>
       ),
     );
 
-    // ── PERUBAHAN: kirim metode_bayar_id juga ────────────────
     final orderData = {
       'jenis_order': _jenisOrder,
-      'metode_bayar': _isCash ? 1 : 2, // backward compat field lama
-      'metode_bayar_id': _selectedPaymentMethod?['id'], // field baru (nullable)
+      'metode_bayar': _isCash ? 1 : 2,
+      'metode_bayar_id': _selectedPaymentMethod!['id'],
       'meja_id': _jenisOrder == Constants.jenisOrderDineIn
           ? (_selectedMejaId == 0 ? null : _selectedMejaId)
           : null,

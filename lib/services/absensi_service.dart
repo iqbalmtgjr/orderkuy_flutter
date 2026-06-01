@@ -55,11 +55,11 @@ class AbsensiService {
     }
   }
 
-  /// Step 1 — Verifikasi password karyawan.
+  /// Step 1 — Verifikasi PIN karyawan.
   /// Jika berhasil, server mengembalikan [absen_token] yang berlaku 2 menit.
   static Future<Map<String, dynamic>> auth({
     required int userId,
-    required String password,
+    required String pin,
   }) async {
     try {
       final response = await http.post(
@@ -67,7 +67,7 @@ class AbsensiService {
         headers: await _headers(withContentType: true),
         body: jsonEncode({
           'user_id': userId,
-          'password': password,
+          'pin': pin,
         }),
       );
 

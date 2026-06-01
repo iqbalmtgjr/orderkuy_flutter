@@ -179,7 +179,8 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
           _isLoading = false;
         });
         if (riwayatRes['offline'] != true) {
-          _showSnackBar(riwayatRes['message'] ?? 'Gagal memuat data', isError: true);
+          _showSnackBar(riwayatRes['message'] ?? 'Gagal memuat data',
+              isError: true);
         }
       }
     } catch (e) {
@@ -326,38 +327,38 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
             ),
           Expanded(
             child: RefreshIndicator(
-        onRefresh: _loadData,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  if (_summary != null) _buildSummaryCard(),
-                  _buildSearchBar(),
-                  Expanded(
-                    child: _orders.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount:
-                                _orders.length + (_isLoadingMore ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              if (index == _orders.length) {
-                                return const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              }
-                              return _buildOrderCard(_orders[index]);
-                            },
-                          ),
-                  ),
-                ],
-              ),
+              onRefresh: _loadData,
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                      children: [
+                        if (_summary != null) _buildSummaryCard(),
+                        _buildSearchBar(),
+                        Expanded(
+                          child: _orders.isEmpty
+                              ? _buildEmptyState()
+                              : ListView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount:
+                                      _orders.length + (_isLoadingMore ? 1 : 0),
+                                  itemBuilder: (context, index) {
+                                    if (index == _orders.length) {
+                                      return const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(16),
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      );
+                                    }
+                                    return _buildOrderCard(_orders[index]);
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
-        ),
         ],
       ),
     );

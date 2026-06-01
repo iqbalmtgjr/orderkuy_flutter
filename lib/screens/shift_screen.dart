@@ -395,7 +395,8 @@ class _BukaShiftFormState extends State<_BukaShiftForm> {
 
   Future<void> _buka() async {
     if (widget.isOffline) {
-      setState(() => _error = 'Tidak dapat membuka shift saat offline. Hubungkan internet terlebih dahulu.');
+      setState(() => _error =
+          'Tidak dapat membuka shift saat offline. Hubungkan internet terlebih dahulu.');
       return;
     }
     if (_pinCtrl.text.isEmpty) {
@@ -886,7 +887,9 @@ class _ShiftAktifView extends StatelessWidget {
   Widget _buildTutupButton(BuildContext context) {
     final isTablet = _isTablet(context);
     return GestureDetector(
-      onTap: isOffline ? () => _showOfflineSnack(context) : () => _showTutupDialog(context),
+      onTap: isOffline
+          ? () => _showOfflineSnack(context)
+          : () => _showTutupDialog(context),
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(vertical: isTablet ? 16 : 14),

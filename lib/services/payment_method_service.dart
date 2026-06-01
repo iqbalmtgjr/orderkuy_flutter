@@ -22,6 +22,8 @@ class PaymentMethodService {
   // GET /api/payment-methods?toko_id=x
   // Dipanggil saat kasir buka app atau payment dialog dibuka
   // ────────────────────────────────────────────────────────
+  static String _cacheKey(int tokoId) => 'payment_methods_cache_$tokoId';
+
   static Future<List<Map<String, dynamic>>> getPaymentMethods(
       int tokoId) async {
     try {
@@ -35,7 +37,13 @@ class PaymentMethodService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final list = data['data'] as List? ?? [];
-        return list.map((e) => Map<String, dynamic>.from(e)).toList();
+        final methods = list.map((e) => Map<String, dynamic>.from(e)).toList();
+
+        // Simpan cache untuk dipakai saat offline
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_cacheKey(tokoId), jsonEncode(methods));
+
+        return methods;
       }
     } on TimeoutException {
       debugPrint('⏱️ getPaymentMethods timeout');
@@ -43,7 +51,19 @@ class PaymentMethodService {
       debugPrint('❌ getPaymentMethods error: $e');
     }
 
-    // Fallback default jika gagal (agar kasir tetap bisa transaksi)
+    // Coba pakai cache terakhir yang berhasil (ada ID real)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString(_cacheKey(tokoId));
+      if (cached != null) {
+        debugPrint('📦 getPaymentMethods: pakai cache offline');
+        final list = jsonDecode(cached) as List;
+        return list.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+
+    // Fallback terakhir — id null, order tidak bisa dikirim ke server
+    debugPrint('⚠️ getPaymentMethods: tidak ada cache, fallback id=null');
     return [
       {'id': null, 'nama': 'Tunai', 'kode': 'CASH', 'icon': null},
       {'id': null, 'nama': 'QRIS', 'kode': 'QRIS', 'icon': null},

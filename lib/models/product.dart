@@ -46,6 +46,7 @@ class OptionGroup {
   final bool isRequired;
   final int minPilih;
   final int maxPilih;
+  final int urutan;
   final List<OptionItem> items;
 
   const OptionGroup({
@@ -55,6 +56,7 @@ class OptionGroup {
     required this.isRequired,
     required this.minPilih,
     required this.maxPilih,
+    this.urutan = 0,
     required this.items,
   });
 
@@ -73,6 +75,7 @@ class OptionGroup {
       isRequired: json['is_required'] == true || json['is_required'] == 1,
       minPilih: _parseInt(json['min_pilih']),
       maxPilih: _parseInt(json['max_pilih']),
+      urutan: _parseInt(json['urutan']),
       items: itemsList,
     );
   }
@@ -134,7 +137,8 @@ class Product {
   factory Product.fromJson(Map<String, dynamic> json) {
     final groupsList = (json['option_groups'] as List? ?? [])
         .map((g) => OptionGroup.fromJson(g as Map<String, dynamic>))
-        .toList();
+        .toList()
+      ..sort((a, b) => a.urutan.compareTo(b.urutan));
 
     return Product(
       id: json['id'],

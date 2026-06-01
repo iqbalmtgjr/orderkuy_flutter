@@ -3,9 +3,11 @@ import '../services/api_service.dart';
 import '../services/print_service.dart';
 import '../services/sync_service.dart';
 import '../models/order.dart';
+import '../models/history.dart' as hist;
 import '../utils/constants.dart';
 import 'kasir_screen.dart';
 import '../widgets/sync_status_widget.dart';
+import '../widgets/invoice_share_widget.dart';
 
 // ── Breakpoint helpers ────────────────────────────────────────
 // small  : sw < 360  (HP kecil / lama)
@@ -229,6 +231,76 @@ class _PesananScreenState extends State<PesananScreen> {
       );
     }
   }
+
+  hist.History _buildHistoryFromOrder(Order order) {
+    final dt = order.createdAt;
+    final dateStr =
+        '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+    hist.MejaInfo? mejaInfo;
+    if (order.mejaId != null && order.mejaNo != null) {
+      mejaInfo = hist.MejaInfo(id: order.mejaId!, nomorMeja: order.mejaNo!);
+    }
+
+    return hist.History(
+      id: order.id,
+      kodeOrder: 'ORD-${order.id}',
+      tanggal: order.createdAt.toIso8601String(),
+      tanggalDisplay: dateStr,
+      jenisOrder: order.jenisOrder,
+      jenisOrderText: order.jenisOrderText,
+      meja: mejaInfo,
+      namaCustomer: '-',
+      totalHarga: order.totalHarga,
+      metodePembayaran: order.metodeBayar,
+      metodePembayaranText: order.metodeBayarText,
+      status: 3,
+      statusText: _orderStatusText(order.status),
+      kasir: order.kasirNama,
+      catatan: order.catatan,
+      items: order.items
+          .map((item) => hist.OrderItem(
+                menuNama: item.menuNama,
+                qty: item.qty,
+                harga: item.harga,
+                subtotal: item.subtotal,
+                opsi: item.opsiDipilih.isNotEmpty ? item.opsiLabel : null,
+              ))
+          .toList(),
+    );
+  }
+
+  String _orderStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case '1':
+      case 'pending':
+        return 'Pending';
+      case '2':
+      case 'processing':
+        return 'Diproses';
+      case '3':
+      case 'completed':
+      case 'done':
+        return 'Selesai';
+      default:
+        return status.isNotEmpty
+            ? status[0].toUpperCase() + status.substring(1)
+            : '-';
+    }
+  }
+
+  void _showInvoiceDialog(Order order) {
+    showDialog(
+      context: context,
+      builder: (_) => InvoiceShareDialog(
+        order: _buildHistoryFromOrder(order),
+        tokoNama: order.tokoNama ?? '',
+        tokoAlamat: order.tokoAlamat ?? '',
+      ),
+    );
+  }
+
 
   void _showFilterDialog() {
     showDialog(
@@ -953,9 +1025,12 @@ class _PesananScreenState extends State<PesananScreen> {
                                 children: [
                                   Expanded(
                                       child: _bsEditButton(order, context)),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   Expanded(
                                       child: _bsPrintButton(order, context)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                      child: _bsShareButton(order, context)),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -967,6 +1042,8 @@ class _PesananScreenState extends State<PesananScreen> {
                               Expanded(child: _bsEditButton(order, context)),
                               const SizedBox(width: 8),
                               Expanded(child: _bsPrintButton(order, context)),
+                              const SizedBox(width: 8),
+                              Expanded(child: _bsShareButton(order, context)),
                               const SizedBox(width: 8),
                               Expanded(child: _bsSelesaiButton(order, context)),
                             ],
@@ -1020,6 +1097,25 @@ class _PesananScreenState extends State<PesananScreen> {
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.blue.shade700,
         side: BorderSide(color: Colors.blue.shade300),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Widget _bsShareButton(Order order, BuildContext sheetCtx) {
+    return OutlinedButton.icon(
+      onPressed: order.id == 0
+          ? null
+          : () {
+              Navigator.pop(sheetCtx);
+              _showInvoiceDialog(order);
+            },
+      icon: const Icon(Icons.share_rounded, size: 15),
+      label: const Text('Share'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.teal.shade700,
+        side: BorderSide(color: Colors.teal.shade300),
         padding: const EdgeInsets.symmetric(vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),

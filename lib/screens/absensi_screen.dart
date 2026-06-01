@@ -16,8 +16,8 @@ class _AbsensiScreenState extends State<AbsensiScreen>
   bool loadingKaryawan = true;
 
   List<Map<String, dynamic>> karyawan = [];
-  // Menyimpan status checkout: userId -> true/false
   Map<int, bool> checkoutStatus = {};
+  Map<int, bool> checkinStatus = {};
 
   AnimationController? _headerAnim;
   Animation<double>? _headerFade;
@@ -65,30 +65,25 @@ class _AbsensiScreenState extends State<AbsensiScreen>
 
   Future<void> processAbsensi({
     required int userId,
-    required String password,
+    required String pin,
     required bool isCheckIn,
   }) async {
     setState(() => loading = true);
 
     try {
-      // Step 1: Auth → dapat absen_token
       final auth = await AbsensiService.auth(
         userId: userId,
-        password: password,
+        pin: pin,
       );
 
       if (auth['success'] != true) {
-        _msg(auth['message'] ?? 'Password salah', isError: true);
+        _msg(auth['message'] ?? 'PIN salah', isError: true);
         return;
       }
 
-      // Ambil absen_token dari response auth
       final String absenToken = auth['absen_token'];
-
-      // Step 2: Ambil GPS
       final pos = await _getLocation();
 
-      // Step 3: checkIn/checkOut pakai absen_token, bukan userId
       final res = isCheckIn
           ? await AbsensiService.checkIn(
               absenToken: absenToken,
@@ -101,8 +96,14 @@ class _AbsensiScreenState extends State<AbsensiScreen>
               longitude: pos.longitude,
             );
 
-      if (!isCheckIn && res['success'] == true) {
-        setState(() => checkoutStatus[userId] = true);
+      if (res['success'] == true) {
+        setState(() {
+          if (isCheckIn) {
+            checkinStatus[userId] = true;
+          } else {
+            checkoutStatus[userId] = true;
+          }
+        });
       }
 
       _msg(res['message'] ?? 'Berhasil');
@@ -136,26 +137,48 @@ class _AbsensiScreenState extends State<AbsensiScreen>
     );
   }
 
-  void _showPasswordDialog(Map<String, dynamic> user) {
-    final TextEditingController pwCtrl = TextEditingController();
-    bool obscure = true;
-    bool dialogLoading = false;
-    int userId = user['id'] as int;
-    String userName = user['name'].toString();
-    bool isCheckedOut = checkoutStatus[userId] == true;
+  void _showPinDialog(Map<String, dynamic> user) {
+    final int userId = user['id'] as int;
+    final String userName = user['name'].toString();
+    final bool alreadyCheckedIn = checkinStatus[userId] == true;
+    final bool alreadyCheckedOut = checkoutStatus[userId] == true;
+    String pin = '';
 
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setDialogState) {
+          void addDigit(String d) {
+            if (pin.length < 6) {
+              setDialogState(() => pin += d);
+            }
+          }
+
+          void removeDigit() {
+            if (pin.isNotEmpty) {
+              setDialogState(() => pin = pin.substring(0, pin.length - 1));
+            }
+          }
+
+          Future<void> submit(bool isCheckIn) async {
+            if (pin.isEmpty) {
+              _msg('PIN tidak boleh kosong', isError: true);
+              return;
+            }
+            Navigator.of(ctx).pop();
+            await processAbsensi(userId: userId, pin: pin, isCheckIn: isCheckIn);
+          }
+
           return BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
             child: Dialog(
               backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-              child: Container(
-                padding: const EdgeInsets.all(28),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 340),
+                child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(28),
@@ -172,14 +195,11 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                   children: [
                     // Avatar
                     Container(
-                      width: 64,
-                      height: 64,
+                      width: 60,
+                      height: 60,
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [
-                            Color(0xFF1e3a6e),
-                            Color(0xFF0f2442),
-                          ],
+                          colors: [Color(0xFF1e3a6e), Color(0xFF0f2442)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -190,133 +210,86 @@ class _AbsensiScreenState extends State<AbsensiScreen>
                           userName.isNotEmpty ? userName[0].toUpperCase() : '?',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 28,
+                            fontSize: 26,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 10),
                     Text(
                       userName,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 17,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF1A1A1A),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      isCheckedOut
-                          ? 'Sudah Check Out Hari Ini'
-                          : 'Masukkan password untuk absensi',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isCheckedOut
-                            ? Colors.green.shade700
-                            : Colors.grey.shade500,
-                      ),
+                      'Masukkan PIN untuk absensi',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
-                    const SizedBox(height: 22),
-                    TextField(
-                      controller: pwCtrl,
-                      obscureText: obscure,
-                      style: const TextStyle(fontSize: 15),
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        hintText: '••••••••',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide:
-                              const BorderSide(color: Color(0xFF1e3a6e)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(
-                              color: Color(0xFF1a315b), width: 2),
-                        ),
-                        prefixIcon: const Icon(Icons.lock_outline,
-                            color: Color(0xFF1a315b)),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscure
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: Colors.grey,
-                          ),
-                          onPressed: () =>
-                              setDialogState(() => obscure = !obscure),
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFFe8edf5),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    if (!dialogLoading) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ActionButton(
-                              label: 'CHECK IN',
-                              icon: Icons.login_rounded,
-                              color: const Color(0xFF1a315b),
-                              onTap: () async {
-                                if (pwCtrl.text.isEmpty) {
-                                  _msg('Password tidak boleh kosong',
-                                      isError: true);
-                                  return;
-                                }
-                                setDialogState(() => dialogLoading = true);
-                                Navigator.of(ctx).pop();
-                                await processAbsensi(
-                                  userId: userId,
-                                  password: pwCtrl.text,
-                                  isCheckIn: true,
-                                );
-                              },
+                    const SizedBox(height: 20),
+
+                    // PIN dots indicator
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(6, (i) {
+                        final filled = i < pin.length;
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 5),
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: filled
+                                ? const Color(0xFF1a315b)
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: filled
+                                  ? const Color(0xFF1a315b)
+                                  : Colors.grey.shade300,
+                              width: 1.5,
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _ActionButton(
-                              label: 'CHECK OUT',
-                              icon: Icons.logout_rounded,
-                              color: const Color(0xFF7B1FA2),
-                              onTap: () async {
-                                if (pwCtrl.text.isEmpty) {
-                                  _msg('Password tidak boleh kosong',
-                                      isError: true);
-                                  return;
-                                }
-                                setDialogState(() => dialogLoading = true);
-                                Navigator.of(ctx).pop();
-                                await processAbsensi(
-                                  userId: userId,
-                                  password: pwCtrl.text,
-                                  isCheckIn: false,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Number pad
+                    _PinPad(onDigit: addDigit, onDelete: removeDigit),
+                    const SizedBox(height: 16),
+
+                    // Action buttons
+                    if (!alreadyCheckedIn)
+                      _ActionButton(
+                        label: 'CHECK IN',
+                        icon: Icons.login_rounded,
+                        color: const Color(0xFF1a315b),
+                        onTap: () => submit(true),
+                      )
+                    else if (!alreadyCheckedOut)
+                      _ActionButton(
+                        label: 'CHECK OUT',
+                        icon: Icons.logout_rounded,
+                        color: const Color(0xFF7B1FA2),
+                        onTap: () => submit(false),
                       ),
-                      const SizedBox(height: 10),
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        child: Text(
-                          'Batal',
-                          style: TextStyle(color: Colors.grey.shade500),
-                        ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: Text(
+                        'Batal',
+                        style: TextStyle(color: Colors.grey.shade500),
                       ),
-                    ] else
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: CircularProgressIndicator(),
-                      ),
+                    ),
                   ],
                 ),
               ),
             ),
+          ),
           );
         });
       },
@@ -327,261 +300,327 @@ class _AbsensiScreenState extends State<AbsensiScreen>
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final days = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu'
+      'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'
     ];
     final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des'
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
     ];
     final dateStr =
         '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0f2442), Color(0xFF1a315b), Color(0xFF1e3a6e)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // ── HEADER ──────────────────────────────────────
-              FadeTransition(
-                opacity: _headerFade ?? const AlwaysStoppedAnimation(1.0),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0f2442), Color(0xFF1a315b), Color(0xFF1e3a6e)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  // ── HEADER ──────────────────────────────────────
+                  FadeTransition(
+                    opacity: _headerFade ?? const AlwaysStoppedAnimation(1.0),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                      child: Column(
                         children: [
-                          // Back button
-                          GestureDetector(
-                            onTap: () => Navigator.of(context).pop(),
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.25),
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Title
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'ABSENSI',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                    letterSpacing: 4,
-                                    fontWeight: FontWeight.w600,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              GestureDetector(
+                                onTap: () => Navigator.of(context).pop(),
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.25),
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  'KARYAWAN',
-                                  style: TextStyle(
+                                  child: const Icon(
+                                    Icons.arrow_back_ios_new_rounded,
                                     color: Colors.white,
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 1,
-                                    height: 1.1,
+                                    size: 18,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'ABSENSI',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                        letterSpacing: 4,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      'KARYAWAN',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 1,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(
+                                  Icons.fingerprint,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 20),
                           Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 14),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(16),
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.fingerprint,
-                              color: Colors.white,
-                              size: 32,
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today,
+                                    color: Colors.white70, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  dateStr,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const Spacer(),
+                                const Icon(Icons.access_time,
+                                    color: Colors.white70, size: 16),
+                                const SizedBox(width: 6),
+                                _LiveClock(),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      // Date-Time Card
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.calendar_today,
-                                color: Colors.white70, size: 16),
-                            const SizedBox(width: 8),
-                            Text(
-                              dateStr,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const Spacer(),
-                            const Icon(Icons.access_time,
-                                color: Colors.white70, size: 16),
-                            const SizedBox(width: 6),
-                            _LiveClock(),
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-              // ── EMPLOYEE LIST ────────────────────────────────
-              Expanded(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF5F5F5),
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(32)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                        child: Row(
-                          children: [
-                            const Text(
-                              'Pilih Karyawan',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF1A1A1A),
-                              ),
-                            ),
-                            const Spacer(),
-                            if (!loadingKaryawan)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFe8edf5),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  '${karyawan.length} orang',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF1a315b),
-                                    fontWeight: FontWeight.w600,
+                  // ── EMPLOYEE GRID ────────────────────────────────
+                  Expanded(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF5F5F5),
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(32)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                            child: Row(
+                              children: [
+                                const Text(
+                                  'Pilih Karyawan',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF1A1A1A),
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: loadingKaryawan
-                            ? const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFF1a315b),
-                                ),
-                              )
-                            : karyawan.isEmpty
-                                ? const Center(
+                                const Spacer(),
+                                if (!loadingKaryawan)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFe8edf5),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
                                     child: Text(
-                                      'Tidak ada data karyawan',
-                                      style: TextStyle(color: Colors.grey),
+                                      '${karyawan.length} orang',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF1a315b),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: loadingKaryawan
+                                ? const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF1a315b),
                                     ),
                                   )
-                                : ListView.builder(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        16, 4, 16, 24),
-                                    itemCount: karyawan.length,
-                                    itemBuilder: (_, i) {
-                                      final user = karyawan[i];
-                                      final uid = user['id'] as int;
-                                      final isOut = checkoutStatus[uid] == true;
-                                      return _KaryawanCard(
-                                        user: user,
-                                        index: i,
-                                        isCheckedOut: isOut,
-                                        onTap: () => _showPasswordDialog(user),
-                                      );
-                                    },
-                                  ),
+                                : karyawan.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'Tidak ada data karyawan',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      )
+                                    : LayoutBuilder(
+                                        builder: (ctx, constraints) {
+                                          final w = constraints.maxWidth;
+                                          final cols = w >= 800
+                                              ? 5
+                                              : w >= 600
+                                                  ? 4
+                                                  : 3;
+                                          return GridView.builder(
+                                            padding: const EdgeInsets.fromLTRB(
+                                                16, 4, 16, 24),
+                                            gridDelegate:
+                                                SliverGridDelegateWithFixedCrossAxisCount(
+                                              crossAxisCount: cols,
+                                              crossAxisSpacing: 10,
+                                              mainAxisSpacing: 10,
+                                              childAspectRatio: 0.85,
+                                            ),
+                                            itemCount: karyawan.length,
+                                            itemBuilder: (_, i) {
+                                          final user = karyawan[i];
+                                          final uid = user['id'] as int;
+                                          return _KaryawanCard(
+                                            user: user,
+                                            index: i,
+                                            isCheckedIn:
+                                                checkinStatus[uid] == true,
+                                            isCheckedOut:
+                                                checkoutStatus[uid] == true,
+                                            onTap: () => _showPinDialog(user),
+                                          );
+                                            },
+                                          );
+                                        },
+                                      ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-
-              // global loading overlay
-              if (loading)
-                Container(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  ),
-                ),
-            ],
+            ),
           ),
-        ),
+
+          // global loading overlay
+          if (loading)
+            Container(
+              color: Colors.black.withValues(alpha: 0.3),
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────
-// Employee Card Widget
+// PIN Numpad Widget
+// ─────────────────────────────────────────────────
+class _PinPad extends StatelessWidget {
+  final void Function(String) onDigit;
+  final void Function() onDelete;
+
+  const _PinPad({required this.onDigit, required this.onDelete});
+
+  Widget _key(String k) {
+    final isDelete = k == '⌫';
+    final isEmpty = k.isEmpty;
+    if (isEmpty) return const Expanded(child: SizedBox());
+    return Expanded(
+      child: SizedBox(
+        height: 46,
+        child: Material(
+          color: isDelete ? Colors.grey.shade100 : const Color(0xFFe8edf5),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => isDelete ? onDelete() : onDigit(k),
+            child: Center(
+              child: isDelete
+                  ? Icon(Icons.backspace_outlined,
+                      color: Colors.grey.shade600, size: 18)
+                  : Text(
+                      k,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1a315b),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const gap = SizedBox(width: 8);
+    const rowGap = SizedBox(height: 8);
+    return Column(
+      children: [
+        Row(children: [_key('1'), gap, _key('2'), gap, _key('3')]),
+        rowGap,
+        Row(children: [_key('4'), gap, _key('5'), gap, _key('6')]),
+        rowGap,
+        Row(children: [_key('7'), gap, _key('8'), gap, _key('9')]),
+        rowGap,
+        Row(children: [_key(''), gap, _key('0'), gap, _key('⌫')]),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────
+// Employee Card Widget (Grid)
 // ─────────────────────────────────────────────────
 class _KaryawanCard extends StatefulWidget {
   final Map<String, dynamic> user;
   final int index;
+  final bool isCheckedIn;
   final bool isCheckedOut;
   final VoidCallback onTap;
 
   const _KaryawanCard({
     required this.user,
     required this.index,
+    required this.isCheckedIn,
     required this.isCheckedOut,
     required this.onTap,
   });
@@ -594,7 +633,6 @@ class _KaryawanCardState extends State<_KaryawanCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _anim;
   late Animation<double> _scale;
-  late Animation<Offset> _slide;
 
   @override
   void initState() {
@@ -604,11 +642,6 @@ class _KaryawanCardState extends State<_KaryawanCard>
       duration: Duration(milliseconds: 400 + widget.index * 60),
     );
     _scale = CurvedAnimation(parent: _anim, curve: Curves.easeOutBack);
-    _slide = Tween<Offset>(
-      begin: const Offset(0.4, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _anim, curve: Curves.easeOut));
-
     Future.delayed(Duration(milliseconds: widget.index * 60), () {
       if (mounted) _anim.forward();
     });
@@ -624,9 +657,9 @@ class _KaryawanCardState extends State<_KaryawanCard>
   Widget build(BuildContext context) {
     final name = widget.user['name'].toString();
     final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final isIn = widget.isCheckedIn;
     final isOut = widget.isCheckedOut;
 
-    // Color palette cycling for avatars
     final List<List<Color>> palettes = [
       [const Color(0xFF1e3a6e), const Color(0xFF0f2442)],
       [const Color(0xFF8E24AA), const Color(0xFF4A148C)],
@@ -636,156 +669,168 @@ class _KaryawanCardState extends State<_KaryawanCard>
     ];
     final palette = palettes[widget.index % palettes.length];
 
-    return SlideTransition(
-      position: _slide,
-      child: ScaleTransition(
-        scale: _scale,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onTap,
+    Color? borderColor;
+    if (isOut) {
+      borderColor = Colors.green.shade300;
+    } else if (isIn) {
+      borderColor = Colors.orange.shade300;
+    }
+
+    return ScaleTransition(
+      scale: _scale,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+              border: borderColor != null
+                  ? Border.all(color: borderColor, width: 1.5)
+                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-                child: Row(
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Avatar with status dot
+                Stack(
                   children: [
-                    // Avatar
-                    Stack(
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: palette,
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              initials,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (isOut)
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              width: 18,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade500,
-                                shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: Colors.white, width: 2),
-                              ),
-                              child: const Icon(Icons.check,
-                                  size: 10, color: Colors.white),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(width: 14),
-
-                    // Name + status
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1A1A1A),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          if (isOut)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.check_circle,
-                                      size: 11, color: Colors.green.shade600),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Sudah Check Out',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.green.shade700,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          else
-                            Text(
-                              'Ketuk untuk absensi',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade400,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    // Arrow / done icon
                     Container(
-                      width: 36,
-                      height: 36,
+                      width: 64,
+                      height: 64,
                       decoration: BoxDecoration(
-                        color: isOut
-                            ? Colors.green.shade50
-                            : const Color(0xFFe8edf5),
+                        gradient: LinearGradient(
+                          colors: palette,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        isOut
-                            ? Icons.check_rounded
-                            : Icons.chevron_right_rounded,
-                        color: isOut
-                            ? Colors.green.shade600
-                            : const Color(0xFF1a315b),
-                        size: 20,
+                      child: Center(
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
+                    if (isIn || isOut)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: isOut
+                                ? Colors.green.shade500
+                                : Colors.orange.shade500,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: Icon(
+                            isOut ? Icons.check : Icons.login,
+                            size: 10,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                if (isOut)
+                  _StatusBadge(
+                    label: 'Check Out',
+                    color: Colors.green.shade700,
+                    bgColor: Colors.green.shade50,
+                    icon: Icons.check_circle,
+                  )
+                else if (isIn)
+                  _StatusBadge(
+                    label: 'Check In',
+                    color: Colors.orange.shade800,
+                    bgColor: Colors.orange.shade50,
+                    icon: Icons.login_rounded,
+                  )
+                else
+                  _StatusBadge(
+                    label: 'Belum Absen',
+                    color: Colors.grey.shade500,
+                    bgColor: Colors.grey.shade100,
+                    icon: Icons.touch_app_outlined,
+                  ),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────
+// Status Badge
+// ─────────────────────────────────────────────────
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  final Color bgColor;
+  final IconData icon;
+
+  const _StatusBadge({
+    required this.label,
+    required this.color,
+    required this.bgColor,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
