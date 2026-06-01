@@ -2,7 +2,8 @@ class Constants {
   // ============================================
   // PRODUCTION - Domain Online
   // ============================================
-  static const String baseUrl = 'https://orderkuy.indotechconsulting.com/api';
+  // static const String baseUrl = 'https://orderkuy.indotechconsulting.com/api';
+  static const String baseUrl = 'https://kasvo.id/api';
 
   // ============================================
   // DEVELOPMENT - Local IP (Commented)
